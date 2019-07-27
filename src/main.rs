@@ -1,3 +1,8 @@
+mod shit;
+mod rawsock_interface;
+use self::shit::{Shit, SthTrait};
+
 fn main() {
-    println!("Hello, world!");
+    let a = Shit::new();
+    println!("Hello, world! {}", a.a);
 }
