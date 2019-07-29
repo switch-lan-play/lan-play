@@ -5,7 +5,10 @@ authors = ["spacemeowx2 <spacemeowx2@gmail.com>"]
 edition = "2018"
 
 [dependencies]
-rawsock = "0.2.1"
+
+[dependencies.rawsock]
+git = "https://github.com/spacemeowx2/rust-rawsock.git"
+branch = "workaround-macos"
 
 [dependencies.smoltcp]
 version = "0.5.0"

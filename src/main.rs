@@ -33,8 +33,9 @@ fn main() {
     }).map(|i| -> Box<dyn rawsock::traits::Interface> {
         i.unwrap()
     });
-    for interf in fuck {
+    for mut interf in fuck {
         let mac = interf.get_mac().expect("Could not get mac");
         println!("Interface opened, data link: {}, mac: {}", interf.data_link(), mac);
+        let p = interf.receive();
     }
 }
