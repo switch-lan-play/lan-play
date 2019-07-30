@@ -60,7 +60,7 @@ impl<'a> GetMac for RawsockInterface<'a> {
                                 if guid == intf_guid {
                                     let len = row.dw_phys_addr_len;
                                     if len == 6 {
-                                        return Ok(EthernetAddress::from_bytes(&row.b_phys_addr));
+                                        return Ok(EthernetAddress::from_bytes(&row.b_phys_addr[0..6]));
                                     }
                                 }
                             }

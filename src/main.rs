@@ -19,8 +19,8 @@ fn main() {
 
     for mut interface in opened.into_iter().map(Result::unwrap) {
         let name = interface.name();
-        let mac = interface.get_mac().expect("Could not get mac");
-        println!("Interface {} opened, data link: {}, mac: {}", name, interface.interface.data_link(), mac);
+        let mac = interface.get_mac();
+        println!("Interface {} opened, data link: {}, mac: {:?}", name, interface.interface.data_link(), mac);
         let interf = &mut interface.interface;
         let _p = interf.receive();
     }
