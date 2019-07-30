@@ -1,11 +1,13 @@
-extern crate rawsock;
-extern crate smoltcp;
-
 #[cfg(windows)]
 mod windows;
 #[cfg(windows)]
 pub use windows::get_mac;
-use smoltcp::wire::{EthernetAddress};
+
+#[cfg(any(target_os="linux", target_os="macos"))]
+mod unix;
+#[cfg(any(target_os="linux", target_os="macos"))]
+pub use unix::get_mac;
+
 use std::fmt::{Display, Result as FmtResult, Formatter};
 
 #[derive(Debug)]
@@ -21,20 +23,4 @@ impl Display for MacAddressError {
             MacAddressError::FailedToCallSystem => f.write_str("Failed to call system"),
         }
     }
-}
-
-#[cfg(any(target_os="linux", target_os="macos"))]
-pub fn get_mac(name: &String) -> Result<EthernetAddress, MacAddressError> {
-    extern crate nix;
-    use nix::{ifaddrs::{getifaddrs}, sys::socket::SockAddr};
-    let addrs = getifaddrs()?;
-    for ifaddr in addrs {
-        if ifaddr.interface_name != name {
-            continue;
-        }
-        if let SockAddr::Link(link) = address {
-            let bytes = link.addr();
-        }
-    }
-    Ok(EthernetAddress([0x02, 0x00, 0x00, 0x00, 0x00, 0x01]))
 }
