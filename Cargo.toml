@@ -21,4 +21,5 @@ features = [
 ]
 
 [target.'cfg(windows)'.dependencies]
-winapi = { version = "0.3", features = ["winuser"] }
+winapi = { version = "0.3" }
+libc = "0.2"

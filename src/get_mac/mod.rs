@@ -13,21 +13,15 @@ pub trait GetMac {
 
 #[derive(Debug)]
 pub enum MacAddressError {
-    DllError
-}
-
-impl ErrorTrait for MacAddressError {
-    fn description(&self) -> &str {
-        match *self {
-            MacAddressError::DllError => "error"
-        }
-    }
+    NotFound,
+    LengthMismatch(u32),
 }
 
 impl Display for MacAddressError {
     fn fmt(&self, f: &mut Formatter) -> FmtResult {
         match *self {
-            MacAddressError::DllError => f.write_str("DllError")
+            MacAddressError::NotFound => f.write_str("Mac address not found"),
+            MacAddressError::LengthMismatch(l) => write!(f, "LengthMismatch {}", l),
         }
     }
 }
