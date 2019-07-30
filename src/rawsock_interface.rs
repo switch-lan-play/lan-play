@@ -2,14 +2,17 @@ extern crate smoltcp;
 extern crate rawsock;
 use smoltcp::phy::{Device,DeviceCapabilities,RxToken,TxToken};
 use smoltcp::time::Instant;
-use smoltcp::Result;
-use smoltcp::socket::{TcpSocket, TcpState};
-use smoltcp::wire::{IpRepr, TcpRepr};
 use std::sync::mpsc;
 use std::thread;
 use std::thread::{JoinHandle};
-use rawsock::traits::{Interface, Library};
+use rawsock::traits::{Interface};
 use rawsock::InterfaceDescription;
+
+#[derive(Debug)]
+pub enum Error {
+    RawsockErr(rawsock::Error),
+    WrongDataLink(rawsock::DataLink)
+}
 
 pub struct RawsockInterface<'a> {
     rx_buffer: [u8; 1536],
@@ -22,50 +25,41 @@ pub struct RawsockInterface<'a> {
 
 pub struct RawRxToken<'a>(&'a mut [u8]);
 
-pub trait Fuck {
-    fn accepts(&self, ip_repr: &IpRepr, repr: &TcpRepr) -> bool;
+pub trait CreateDevice<'a> {
+    fn create_device(&'a self, desc: InterfaceDescription) -> Result<RawsockInterface<'a>, Error>;
 }
 
-impl<'a> Fuck for TcpSocket<'a> {
-    fn accepts(&self, ip_repr: &IpRepr, repr: &TcpRepr) -> bool {
-        if self.state() == TcpState::Closed { return false }
-
-        // If we're still listening for SYNs and the packet has an ACK, it cannot
-        // be destined to this socket, but another one may well listen on the same
-        // local endpoint.
-        if self.state() == TcpState::Listen && repr.ack_number.is_some() { return false }
-
-        // Reject packets with a wrong destination.
-        if self.local_endpoint().port != repr.dst_port { return false }
-        if !self.local_endpoint().addr.is_unspecified() &&
-            self.local_endpoint().addr != ip_repr.dst_addr() { return false }
-
-        // Reject packets from a source to which we aren't connected.
-        if self.remote_endpoint().port != 0 &&
-            self.remote_endpoint().port != repr.src_port { return false }
-        if !self.remote_endpoint().addr.is_unspecified() &&
-            self.remote_endpoint().addr != ip_repr.src_addr() { return false }
-
-        true
+impl<'a> CreateDevice<'a> for (dyn rawsock::traits::Library + 'a) {
+    fn create_device(&'a self, desc: InterfaceDescription) -> Result<RawsockInterface<'a>, Error> {
+        let interface = self.open_interface(&desc.name);
+        match interface {
+            Err(err) => Err(Error::RawsockErr(err)),
+            Ok(interface) => {
+                let data_link = interface.data_link();
+                if let rawsock::DataLink::Ethernet = data_link {} else {
+                    return Err(Error::WrongDataLink(data_link));
+                }
+                let (tx, _rx) = mpsc::channel::<()>();
+                let thread = thread::spawn(move || {
+                    
+                });
+                Ok(RawsockInterface {
+                    rx_buffer: [0; 1536],
+                    tx_buffer: [0; 1536],
+                    thread,
+                    interface,
+                    desc,
+                    stopper: tx
+                })
+            }
+        }
     }
 }
 
 impl<'a> RawsockInterface<'a> {
-    // pub fn new(desc: InterfaceDescription) -> RawsockInterface<'a> {
-    //     let (tx, rx) = mpsc::channel::<()>();
-    //     let thread = thread::spawn(move || {
-            
-    //     });
-    //     let interface = 
-    //     RawsockInterface {
-    //         rx_buffer: [0; 1536],
-    //         tx_buffer: [0; 1536],
-    //         thread,
-    //         interface: ,
-    //         desc,
-    //         stopper: tx
-    //     }
-    // }
+    pub fn name(&self) -> &String {
+        &self.desc.name
+    }
 }
 
 impl<'a> Drop for RawsockInterface<'a> {
@@ -76,8 +70,8 @@ impl<'a> Drop for RawsockInterface<'a> {
 }
 
 impl<'a> RxToken for RawRxToken<'a> {
-    fn consume<R, F>(mut self, _timestamp: Instant, f: F) -> Result<R>
-        where F: FnOnce(&[u8]) -> Result<R>
+    fn consume<R, F>(mut self, _timestamp: Instant, f: F) -> smoltcp::Result<R>
+        where F: FnOnce(&[u8]) -> smoltcp::Result<R>
     {
         // TODO: receive packet into buffer
         let result = f(&mut self.0);
@@ -90,8 +84,8 @@ impl<'a> RxToken for RawRxToken<'a> {
 pub struct RawTxToken<'a>(&'a mut [u8]);
 
 impl<'a> TxToken for RawTxToken<'a> {
-    fn consume<R, F>(self, _timestamp: Instant, len: usize, f: F) -> Result<R>
-        where F: FnOnce(&mut [u8]) -> Result<R>
+    fn consume<R, F>(self, _timestamp: Instant, len: usize, f: F) -> smoltcp::Result<R>
+        where F: FnOnce(&mut [u8]) -> smoltcp::Result<R>
     {
         let result = f(&mut self.0[..len]);
         println!("tx called {}", len);
