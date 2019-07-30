@@ -19,3 +19,6 @@ features = [
     "proto-ipv4",
     "socket-tcp", "socket-udp", "socket-icmp"
 ]
+
+[target.'cfg(windows)'.dependencies]
+winapi = { version = "0.3", features = ["winuser"] }
