@@ -25,3 +25,11 @@ libc = "0.2"
 
 [target.'cfg(any(target_os = "linux", target_os = "macos"))'.dependencies]
 nix = "0.14"
+
+[profile.release]
+opt-level = "z"
+debug = false
+rpath = false
+lto = true
+debug-assertions = false
+panic = "abort"
