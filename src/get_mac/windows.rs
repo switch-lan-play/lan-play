@@ -1,5 +1,4 @@
 extern crate libc;
-extern crate winapi;
 use super::{MacAddressError};
 use smoltcp::wire::{EthernetAddress};
 use std::{mem, ptr};

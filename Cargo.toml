@@ -21,5 +21,7 @@ features = [
 ]
 
 [target.'cfg(windows)'.dependencies]
-winapi = { version = "0.3" }
 libc = "0.2"
+
+[target.'cfg(any(target_os = "linux", target_os = "macos"))'.dependencies]
+nix = "0.14"
