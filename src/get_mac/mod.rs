@@ -1,6 +1,9 @@
 extern crate rawsock;
 extern crate smoltcp;
-#[cfg(windows)] extern crate winapi;
+#[cfg(windows)]
+mod windows;
+#[cfg(windows)]
+pub use windows::GetMac;
 use smoltcp::wire::{EthernetAddress};
 use std::error::Error as ErrorTrait;
 use std::fmt::{Display, Result as FmtResult, Formatter};
@@ -28,14 +31,6 @@ impl Display for MacAddressError {
         match *self {
             MacAddressError::DllError => f.write_str("DllError")
         }
-    }
-}
-
-#[cfg(windows)]
-impl<'a> GetMac for RawsockInterface<'a> {
-    fn get_mac(&self) -> Result<EthernetAddress, MacAddressError> {
-        let name = self.desc.name;
-        Ok(EthernetAddress([0x02, 0x00, 0x00, 0x00, 0x00, 0x01]))
     }
 }
 
