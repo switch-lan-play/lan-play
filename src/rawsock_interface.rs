@@ -1,7 +1,9 @@
 extern crate smoltcp;
 extern crate rawsock;
+use crate::get_mac::{get_mac, MacAddressError};
 use smoltcp::phy::{Device,DeviceCapabilities,RxToken,TxToken};
 use smoltcp::time::Instant;
+use smoltcp::wire::{EthernetAddress};
 use std::sync::mpsc;
 use std::thread;
 use std::thread::{JoinHandle};
@@ -11,8 +13,11 @@ use rawsock::InterfaceDescription;
 #[derive(Debug)]
 pub enum Error {
     RawsockErr(rawsock::Error),
-    WrongDataLink(rawsock::DataLink)
+    WrongDataLink(rawsock::DataLink),
+    GetMac(MacAddressError),
 }
+#[derive(Debug)]
+pub struct ErrorWithDesc (pub Error, pub InterfaceDescription);
 
 pub struct RawsockInterface<'a> {
     rx_buffer: [u8; 1536],
@@ -20,37 +25,43 @@ pub struct RawsockInterface<'a> {
     thread: JoinHandle<()>,
     pub interface: Box<dyn Interface<'a> + 'a>,
     pub desc: InterfaceDescription,
-    stopper: std::sync::mpsc::Sender<()>
+    mac: EthernetAddress,
+    stopper: std::sync::mpsc::Sender<()>,
 }
 
 pub struct RawRxToken<'a>(&'a mut [u8]);
 
 pub trait CreateDevice<'a> {
-    fn create_device(&'a self, desc: InterfaceDescription) -> Result<RawsockInterface<'a>, Error>;
+    fn create_device(&'a self, desc: InterfaceDescription) -> Result<RawsockInterface<'a>, ErrorWithDesc>;
 }
 
 impl<'a> CreateDevice<'a> for (dyn rawsock::traits::Library + 'a) {
-    fn create_device(&'a self, desc: InterfaceDescription) -> Result<RawsockInterface<'a>, Error> {
-        let interface = self.open_interface(&desc.name);
+    fn create_device(&'a self, desc: InterfaceDescription) -> Result<RawsockInterface<'a>, ErrorWithDesc> {
+        let name = &desc.name;
+        let interface = self.open_interface(name);
         match interface {
-            Err(err) => Err(Error::RawsockErr(err)),
+            Err(err) => Err(ErrorWithDesc(Error::RawsockErr(err), desc)),
             Ok(interface) => {
                 let data_link = interface.data_link();
                 if let rawsock::DataLink::Ethernet = data_link {} else {
-                    return Err(Error::WrongDataLink(data_link));
+                    return Err(ErrorWithDesc(Error::WrongDataLink(data_link), desc));
                 }
                 let (tx, _rx) = mpsc::channel::<()>();
                 let thread = thread::spawn(move || {
                     
                 });
-                Ok(RawsockInterface {
-                    rx_buffer: [0; 1536],
-                    tx_buffer: [0; 1536],
-                    thread,
-                    interface,
-                    desc,
-                    stopper: tx
-                })
+                match get_mac(name) {
+                    Ok(mac) => Ok(RawsockInterface {
+                        rx_buffer: [0; 1536],
+                        tx_buffer: [0; 1536],
+                        thread,
+                        interface,
+                        desc,
+                        mac,
+                        stopper: tx
+                    }),
+                    Err(err) => Err(ErrorWithDesc(Error::GetMac(err), desc))
+                }
             }
         }
     }
@@ -59,6 +70,12 @@ impl<'a> CreateDevice<'a> for (dyn rawsock::traits::Library + 'a) {
 impl<'a> RawsockInterface<'a> {
     pub fn name(&self) -> &String {
         &self.desc.name
+    }
+    pub fn mac(&self) -> &EthernetAddress {
+        &self.mac
+    }
+    pub fn data_link(&self) -> rawsock::DataLink {
+        self.interface.data_link()
     }
 }
 

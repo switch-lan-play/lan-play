@@ -1,7 +1,6 @@
 extern crate libc;
 extern crate winapi;
-use super::{GetMac, MacAddressError};
-use crate::rawsock_interface::RawsockInterface;
+use super::{MacAddressError};
 use smoltcp::wire::{EthernetAddress};
 use std::{mem, ptr};
 
@@ -30,49 +29,47 @@ fn from_u16(s: &[u16]) -> Option<String> {
     return None;
 }
 
-impl<'a> GetMac for RawsockInterface<'a> {
-    fn get_mac(&self) -> Result<EthernetAddress, MacAddressError> {
-        if let Some(intf_guid) = get_guid(&self.desc.name) {
-            let mut size = 0u32;
-            let mut table: *mut MibIftable = ptr::null_mut();
+pub fn get_mac(name: &String) -> Result<EthernetAddress, MacAddressError> {
+    if let Some(intf_guid) = get_guid(name) {
+        let mut size = 0u32;
+        let mut table: *mut MibIftable = ptr::null_mut();
 
-            unsafe {
-                if GetIfTable(
-                    ptr::null_mut::<MibIftable>(),
-                    &mut size as *mut libc::c_ulong,
-                    false,
-                ) == ERROR_INSUFFICIENT_BUFFER
-                {
-                    table = mem::transmute(libc::malloc(size as libc::size_t));
-                }
+        unsafe {
+            if GetIfTable(
+                ptr::null_mut::<MibIftable>(),
+                &mut size as *mut libc::c_ulong,
+                false,
+            ) == ERROR_INSUFFICIENT_BUFFER
+            {
+                table = mem::transmute(libc::malloc(size as libc::size_t));
+            }
 
-                if GetIfTable(table, &mut size as *mut libc::c_ulong, false) == NO_ERROR {
-                    let ptr: *const MibIfrow = (&(*table).table) as *const _;
-                    let shit = std::slice::from_raw_parts(
-                        ptr,
-                        (*table).dw_num_entries as usize
-                    );
-                    for i in shit {
-                        let row = &*i;
+            if GetIfTable(table, &mut size as *mut libc::c_ulong, false) == NO_ERROR {
+                let ptr: *const MibIfrow = (&(*table).table) as *const _;
+                let shit = std::slice::from_raw_parts(
+                    ptr,
+                    (*table).dw_num_entries as usize
+                );
+                for i in shit {
+                    let row = &*i;
 
-                        if let Some(name) = from_u16(&row.wsz_name) {
-                            if let Some(guid) = get_guid(&name) {
-                                if guid == intf_guid {
-                                    let len = row.dw_phys_addr_len;
-                                    if len == 6 {
-                                        return Ok(EthernetAddress::from_bytes(&row.b_phys_addr[0..6]));
-                                    }
+                    if let Some(name) = from_u16(&row.wsz_name) {
+                        if let Some(guid) = get_guid(&name) {
+                            if guid == intf_guid {
+                                let len = row.dw_phys_addr_len;
+                                if len == 6 {
+                                    return Ok(EthernetAddress::from_bytes(&row.b_phys_addr[0..6]));
                                 }
                             }
                         }
                     }
                 }
-                libc::free(mem::transmute(table));
             }
-            return Err(MacAddressError::NotFound);
+            libc::free(mem::transmute(table));
         }
-        Err(MacAddressError::NotFound)
+        return Err(MacAddressError::NotFound);
     }
+    Err(MacAddressError::NotFound)
 }
 
 pub const MAX_INTERFACE_NAME_LEN: usize = 256;

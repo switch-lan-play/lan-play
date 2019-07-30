@@ -2,14 +2,10 @@ extern crate rawsock;
 extern crate smoltcp;
 #[cfg(windows)]
 mod windows;
+#[cfg(windows)]
+pub use windows::get_mac;
 use smoltcp::wire::{EthernetAddress};
-use std::error::Error as ErrorTrait;
 use std::fmt::{Display, Result as FmtResult, Formatter};
-use super::rawsock_interface::RawsockInterface;
-
-pub trait GetMac {
-    fn get_mac(&self) -> Result<EthernetAddress, MacAddressError>;
-}
 
 #[derive(Debug)]
 pub enum MacAddressError {
@@ -27,8 +23,6 @@ impl Display for MacAddressError {
 }
 
 #[cfg(target_os="macos")]
-impl<'a> GetMac for RawsockInterface<'a> {
-    fn get_mac(&self) -> Result<EthernetAddress, MacAddressError> {
-        Ok(EthernetAddress([0x02, 0x00, 0x00, 0x00, 0x00, 0x01]))
-    }
+pub fn get_mac(name: &String) -> Result<EthernetAddress, MacAddressError> {
+    Ok(EthernetAddress([0x02, 0x00, 0x00, 0x00, 0x00, 0x01]))
 }
