@@ -10,14 +10,12 @@ use std::fmt::{Display, Result as FmtResult, Formatter};
 #[derive(Debug)]
 pub enum MacAddressError {
     NotFound,
-    LengthMismatch(u32),
 }
 
 impl Display for MacAddressError {
     fn fmt(&self, f: &mut Formatter) -> FmtResult {
         match *self {
             MacAddressError::NotFound => f.write_str("Mac address not found"),
-            MacAddressError::LengthMismatch(l) => write!(f, "LengthMismatch {}", l),
         }
     }
 }

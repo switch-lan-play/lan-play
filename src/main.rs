@@ -1,6 +1,5 @@
 extern crate rawsock;
 
-mod shit;
 mod rawsock_interface;
 mod get_mac;
 use rawsock_interface::{CreateDevice, ErrorWithDesc};
@@ -25,6 +24,5 @@ fn main() {
         println!("Interface {} opened, mac: {}, data link: {}", name, interface.mac(), interface.data_link());
         let interf = &mut interface.interface;
         let _p = interf.receive();
-        println!("packet {:?}", _p);
     }
 }

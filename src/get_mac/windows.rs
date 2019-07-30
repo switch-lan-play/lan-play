@@ -6,7 +6,6 @@ use std::{mem, ptr};
 
 const NO_ERROR: u32 = 0;
 const ERROR_INSUFFICIENT_BUFFER: u32 = 122;
-const GUID_LEN: usize = 38;
 
 fn get_guid<'a>(s: &'a String) -> Option<&'a str> {
     if let Some(pos) = s.find('{') {
@@ -46,11 +45,11 @@ pub fn get_mac(name: &String) -> Result<EthernetAddress, MacAddressError> {
 
             if GetIfTable(table, &mut size as *mut libc::c_ulong, false) == NO_ERROR {
                 let ptr: *const MibIfrow = (&(*table).table) as *const _;
-                let shit = std::slice::from_raw_parts(
+                let table = std::slice::from_raw_parts(
                     ptr,
                     (*table).dw_num_entries as usize
                 );
-                for i in shit {
+                for i in table {
                     let row = &*i;
 
                     if let Some(name) = from_u16(&row.wsz_name) {
