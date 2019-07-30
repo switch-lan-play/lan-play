@@ -440,7 +440,7 @@ dependencies = [
 [[package]]
 name = "rawsock"
 version = "0.2.1"
-source = "git+https://github.com/spacemeowx2/rust-rawsock.git?branch=workaround-macos#7f0d42526d3061e1d2ad7eb270fca1e4a1864d8e"
+source = "git+https://github.com/spacemeowx2/rust-rawsock.git?branch=workaround-macos#b38742ad127426d6f8d57242ac5f70b7b44c6ac6"
 dependencies = [
  "bitflags 1.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "dlopen 0.1.7 (registry+https://github.com/rust-lang/crates.io-index)",
