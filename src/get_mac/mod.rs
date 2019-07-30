@@ -2,8 +2,6 @@ extern crate rawsock;
 extern crate smoltcp;
 #[cfg(windows)]
 mod windows;
-#[cfg(windows)]
-pub use windows::GetMac;
 use smoltcp::wire::{EthernetAddress};
 use std::error::Error as ErrorTrait;
 use std::fmt::{Display, Result as FmtResult, Formatter};
