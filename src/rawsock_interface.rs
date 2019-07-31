@@ -74,11 +74,6 @@ impl<'a> RawsockInterfaceSet {
                 if let rawsock::DataLink::Ethernet = data_link {} else {
                     return Err(ErrorWithDesc(Error::WrongDataLink(data_link), desc));
                 }
-                // let thread = thread::scope::(|s| {
-                //     s.spawn(|_| {
-                //         let shit = self.open_interface(name);
-                //     });
-                // });
                 match get_mac(name) {
                     Ok(mac) => Ok(RawsockInterface {
                         rx_buffer: [0; 1536],
@@ -140,7 +135,7 @@ impl<'a> TxToken for RawTxToken<'a> {
     }
 }
 
-impl<'a, 'b> smoltcp::phy::Device<'a> for RawsockInterface<'a> {
+impl<'a, 'b> smoltcp::phy::Device<'a> for RawsockInterface<'b> {
     type RxToken = RawRxToken<'a>;
     type TxToken = RawTxToken<'a>;
 
