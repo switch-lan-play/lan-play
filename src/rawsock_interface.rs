@@ -5,7 +5,6 @@ use smoltcp::wire::{EthernetAddress};
 use rawsock::traits::{Interface, Library};
 use rawsock::InterfaceDescription;
 use crossbeam_utils::thread;
-use smoltcp::{iface::{EthernetInterfaceBuilder, NeighborCache}, wire::{IpAddress, IpCidr}};
 
 #[derive(Debug)]
 pub enum Error {
@@ -22,7 +21,6 @@ pub struct RawsockInterfaceSet {
 }
 
 pub struct RawsockInterface<'a> {
-    rx_buffer: [u8; 1536],
     tx_buffer: [u8; 1536],
     pub desc: InterfaceDescription,
     interface: Box<dyn Interface<'a> + 'a>,
@@ -76,7 +74,6 @@ impl<'a> RawsockInterfaceSet {
                 }
                 match get_mac(name) {
                     Ok(mac) => Ok(RawsockInterface {
-                        rx_buffer: [0; 1536],
                         tx_buffer: [0; 1536],
                         data_link,
                         desc,
@@ -117,19 +114,20 @@ impl<'a> RxToken for RawRxToken<'a> {
         let p = &self.0;
         let len = p.len();
         let result = f(p);
-        println!("rx called {}", len);
+        // println!("rx called {}", len);
         result
     }
 }
 
 
-pub struct RawTxToken<'a>(&'a mut [u8]);
+pub struct RawTxToken<'a>(&'a mut [u8], &'a Box<Interface<'a> + 'a>);
 
 impl<'a> TxToken for RawTxToken<'a> {
     fn consume<R, F>(self, _timestamp: Instant, len: usize, f: F) -> smoltcp::Result<R>
         where F: FnOnce(&mut [u8]) -> smoltcp::Result<R>
     {
         let result = f(&mut self.0[..len]);
+        let interface = self.1;
         println!("tx called {}", len);
         // TODO: send packet out
         result
@@ -143,7 +141,8 @@ impl<'a, 'b> smoltcp::phy::Device<'a> for RawsockInterface<'b> {
     fn receive(&'a mut self) -> Option<(Self::RxToken, Self::TxToken)> {
         match self.interface.receive() {
             Ok(packet) => Some((RawRxToken(packet),
-              RawTxToken(&mut self.tx_buffer[..]))),
+              RawTxToken(&mut self.tx_buffer[..], self.interface)
+            )),
             Err(_) => None
         }
     }

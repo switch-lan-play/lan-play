@@ -32,7 +32,7 @@ fn main() {
     let ethernet_addr = device.mac().clone();
     let neighbor_cache = NeighborCache::new(BTreeMap::new());
     let ip_addrs = [
-        IpCidr::new(IpAddress::v4(192, 168, 233, 1), 24),
+        IpCidr::new(IpAddress::v4(192, 168, 233, 2), 24),
     ];
     let mut iface = EthernetInterfaceBuilder::new(device)
             .ethernet_addr(ethernet_addr)
@@ -50,10 +50,16 @@ fn main() {
 
     {
         let mut socket = sockets.get::<TcpSocket>(tcp2_handle);
-        socket.listen(1234);
+        socket.listen(1234).expect("can not listen to 1234");
     }
     loop {
-        iface.poll(&mut sockets, Instant::now());
+        match iface.poll(&mut sockets, Instant::now()) {
+            Err(smoltcp::Error::Unrecognized) => continue,
+            Err(err) => {
+                println!("poll {}", err);
+            },
+            Ok(_) => ()
+        }
 
         {
             let mut socket = sockets.get::<TcpSocket>(tcp2_handle);
