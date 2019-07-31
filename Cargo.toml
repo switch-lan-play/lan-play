@@ -20,8 +20,12 @@ features = [
 ]
 
 [patch.crates-io.rawsock]
-git = "https://github.com/spacemeowx2/rust-rawsock.git"
-branch = "workaround-macos"
+# git = "https://github.com/spacemeowx2/rust-rawsock.git"
+# branch = "workaround-macos"
+path = '../rust-rawsock'
+
+[patch.'https://github.com/switch-lan-play/smoltcp.git'.smoltcp]
+path = '../smoltcp'
 
 [target.'cfg(windows)'.dependencies]
 libc = "0.2"

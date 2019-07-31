@@ -1,13 +1,10 @@
-extern crate smoltcp;
-extern crate rawsock;
 use crate::get_mac::{get_mac, MacAddressError};
 use smoltcp::phy::{Device,DeviceCapabilities,RxToken,TxToken};
 use smoltcp::time::Instant;
 use smoltcp::wire::{EthernetAddress};
 use std::sync::mpsc;
-use std::thread;
 use std::thread::{JoinHandle};
-use rawsock::traits::{Interface};
+use rawsock::traits::{Interface, Library};
 use rawsock::InterfaceDescription;
 
 #[derive(Debug)]
@@ -19,26 +16,47 @@ pub enum Error {
 #[derive(Debug)]
 pub struct ErrorWithDesc (pub Error, pub InterfaceDescription);
 
+pub struct RawsockInterfaceSet {
+    lib:        Box<dyn Library + Send>,
+    all_interf: Vec<rawsock::InterfaceDescription>
+}
+
 pub struct RawsockInterface<'a> {
     rx_buffer: [u8; 1536],
     tx_buffer: [u8; 1536],
-    thread: JoinHandle<()>,
-    pub interface: Box<dyn Interface<'a> + 'a>,
     pub desc: InterfaceDescription,
+    interface: Box<dyn Interface<'a> + 'a>,
     mac: EthernetAddress,
-    stopper: std::sync::mpsc::Sender<()>,
+    data_link: rawsock::DataLink,
+    dummy: &'a (),
 }
 
-pub struct RawRxToken<'a>(&'a mut [u8]);
-
-pub trait CreateDevice<'a> {
-    fn create_device(&'a self, desc: InterfaceDescription) -> Result<RawsockInterface<'a>, ErrorWithDesc>;
-}
-
-impl<'a> CreateDevice<'a> for (dyn rawsock::traits::Library + 'a) {
+impl<'a> RawsockInterfaceSet {
+    pub fn new() -> Result<RawsockInterfaceSet, rawsock::Error> {
+        let lib = rawsock::open_best_library()?;
+        let all_interf = lib.all_interfaces()?;
+        Ok(RawsockInterfaceSet {
+            lib,
+            all_interf,
+        })
+    }
+    pub fn lib_version(&self) -> rawsock::LibraryVersion {
+        self.lib.version()
+    }
+    pub fn open_all_interface(&'a self) -> (Vec<RawsockInterface<'a>>, Vec<ErrorWithDesc>) {
+        let all_interf = self.all_interf.clone();
+        let (opened, errored): (Vec<_>, _) = all_interf
+            .into_iter()
+            .map(|i| self.create_device(i))
+            .partition(Result::is_ok);
+        (
+            opened.into_iter().map(Result::unwrap).collect::<Vec<_>>(),
+            errored.into_iter().map(|i| i.err().unwrap()).collect::<Vec<_>>()
+        )
+    }
     fn create_device(&'a self, desc: InterfaceDescription) -> Result<RawsockInterface<'a>, ErrorWithDesc> {
         let name = &desc.name;
-        let interface = self.open_interface(name);
+        let interface = self.lib.open_interface(name);
         match interface {
             Err(err) => Err(ErrorWithDesc(Error::RawsockErr(err), desc)),
             Ok(interface) => {
@@ -46,19 +64,20 @@ impl<'a> CreateDevice<'a> for (dyn rawsock::traits::Library + 'a) {
                 if let rawsock::DataLink::Ethernet = data_link {} else {
                     return Err(ErrorWithDesc(Error::WrongDataLink(data_link), desc));
                 }
-                let (tx, _rx) = mpsc::channel::<()>();
-                let thread = thread::spawn(move || {
-                    
-                });
+                // let thread = thread::scope::(|s| {
+                //     s.spawn(|_| {
+                //         let shit = self.open_interface(name);
+                //     });
+                // });
                 match get_mac(name) {
                     Ok(mac) => Ok(RawsockInterface {
                         rx_buffer: [0; 1536],
                         tx_buffer: [0; 1536],
-                        thread,
-                        interface,
+                        data_link,
                         desc,
+                        interface,
                         mac,
-                        stopper: tx
+                        dummy: &(),
                     }),
                     Err(err) => Err(ErrorWithDesc(Error::GetMac(err), desc))
                 }
@@ -75,16 +94,13 @@ impl<'a> RawsockInterface<'a> {
         &self.mac
     }
     pub fn data_link(&self) -> rawsock::DataLink {
-        self.interface.data_link()
+        self.data_link
+    }
+    pub fn start_loop(&self) {
     }
 }
 
-impl<'a> Drop for RawsockInterface<'a> {
-    fn drop(&mut self) {
-        // self.stopper.send(()).unwrap();
-        // self.thread.join();
-    }
-}
+pub struct RawRxToken<'a>(&'a mut [u8]);
 
 impl<'a> RxToken for RawRxToken<'a> {
     fn consume<R, F>(mut self, _timestamp: Instant, f: F) -> smoltcp::Result<R>
