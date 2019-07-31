@@ -36,5 +36,7 @@ fn main() {
             .ip_addrs(ip_addrs)
             .finalize();
     let mut sockets = SocketSet::new(vec![]);
-    iface.poll(&mut sockets, Instant::now());
+    loop {
+        iface.poll(&mut sockets, Instant::now());
+    }
 }

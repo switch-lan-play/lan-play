@@ -108,14 +108,14 @@ impl<'a> RawsockInterface<'a> {
     }
 }
 
-pub struct RawRxToken<'a>(&'a mut [u8]);
+pub struct RawRxToken<'a>(rawsock::BorrowedPacket<'a>);
 
 impl<'a> RxToken for RawRxToken<'a> {
-    fn consume<R, F>(mut self, _timestamp: Instant, f: F) -> smoltcp::Result<R>
+    fn consume<R, F>(self, _timestamp: Instant, f: F) -> smoltcp::Result<R>
         where F: FnOnce(&[u8]) -> smoltcp::Result<R>
     {
         // TODO: receive packet into buffer
-        let result = f(&mut self.0);
+        let result = f(&self.0);
         println!("rx called");
         result
     }
@@ -140,8 +140,11 @@ impl<'a, 'b> smoltcp::phy::Device<'a> for RawsockInterface<'b> {
     type TxToken = RawTxToken<'a>;
 
     fn receive(&'a mut self) -> Option<(Self::RxToken, Self::TxToken)> {
-        Some((RawRxToken(&mut self.rx_buffer[..]),
-              RawTxToken(&mut self.tx_buffer[..])))
+        match self.interface.receive() {
+            Ok(packet) => Some((RawRxToken(packet),
+              RawTxToken(&mut self.tx_buffer[..]))),
+            Err(_) => None
+        }
     }
 
     fn transmit(&'a mut self) -> Option<Self::TxToken> {
