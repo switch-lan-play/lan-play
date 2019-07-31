@@ -1,10 +1,11 @@
 use crate::get_addr::{get_mac, GetAddressError};
-use smoltcp::phy::{Device,DeviceCapabilities,RxToken,TxToken};
+use smoltcp::phy::{DeviceCapabilities,RxToken,TxToken};
 use smoltcp::time::Instant;
 use smoltcp::wire::{EthernetAddress};
 use rawsock::traits::{Interface, Library};
 use rawsock::InterfaceDescription;
 use crossbeam_utils::thread;
+use smoltcp::{iface::{EthernetInterfaceBuilder, NeighborCache}, wire::{IpAddress, IpCidr}};
 
 #[derive(Debug)]
 pub enum Error {
@@ -54,13 +55,14 @@ impl<'a> RawsockInterfaceSet {
         )
     }
     pub fn start(&self, interfaces: Vec<RawsockInterface<'a>>) {
-        thread::scope(|s| {
-            for i in &interfaces {
-                s.spawn(move |_| {
-                    i.start_loop()
-                });
-            }
-        }).unwrap();
+
+        // thread::scope(|s| {
+        //     for i in &interfaces {
+        //         s.spawn(move |_| {
+        //             i.start_loop()
+        //         });
+        //     }
+        // }).unwrap();
     }
     fn create_device(&'a self, desc: InterfaceDescription) -> Result<RawsockInterface<'a>, ErrorWithDesc> {
         let name = &desc.name;
@@ -138,7 +140,7 @@ impl<'a> TxToken for RawTxToken<'a> {
     }
 }
 
-impl<'a> Device<'a> for RawsockInterface<'a> {
+impl<'a, 'b> smoltcp::phy::Device<'a> for RawsockInterface<'a> {
     type RxToken = RawRxToken<'a>;
     type TxToken = RawTxToken<'a>;
 

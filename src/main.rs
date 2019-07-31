@@ -5,8 +5,9 @@ extern crate crossbeam_utils;
 mod rawsock_interface;
 mod get_addr;
 
-use rawsock_interface::{ErrorWithDesc, RawsockInterfaceSet};
-use rawsock::{open_best_library};
+use rawsock_interface::{ErrorWithDesc, RawsockInterfaceSet, RawsockInterface};
+use smoltcp::{iface::{EthernetInterfaceBuilder, NeighborCache}, wire::{IpAddress, IpCidr}};
+use std::collections::BTreeMap;
 
 fn main() {
     println!("Opening packet capturing library");
@@ -23,5 +24,17 @@ fn main() {
         println!("Interface {} opened, mac: {}, data link: {}", name, interface.mac(), interface.data_link());
     }
 
-    set.start(opened);
+    let device = opened[2];
+    let ethernet_addr = device.mac().clone();
+    let neighbor_cache = NeighborCache::new(BTreeMap::new());
+    let ip_addrs = [
+        IpCidr::new(IpAddress::v4(192, 168, 69, 1), 24),
+    ];
+
+    let mut iface = EthernetInterfaceBuilder::new(device)
+            .ethernet_addr(ethernet_addr)
+            .neighbor_cache(neighbor_cache)
+            .ip_addrs(ip_addrs)
+            .finalize();
+
 }
