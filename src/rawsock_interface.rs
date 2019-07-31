@@ -1,17 +1,16 @@
-use crate::get_mac::{get_mac, MacAddressError};
+use crate::get_addr::{get_mac, GetAddressError};
 use smoltcp::phy::{Device,DeviceCapabilities,RxToken,TxToken};
 use smoltcp::time::Instant;
 use smoltcp::wire::{EthernetAddress};
-use std::sync::mpsc;
-use std::thread::{JoinHandle};
 use rawsock::traits::{Interface, Library};
 use rawsock::InterfaceDescription;
+use crossbeam_utils::thread;
 
 #[derive(Debug)]
 pub enum Error {
     RawsockErr(rawsock::Error),
     WrongDataLink(rawsock::DataLink),
-    GetMac(MacAddressError),
+    GetAddr(GetAddressError),
 }
 #[derive(Debug)]
 pub struct ErrorWithDesc (pub Error, pub InterfaceDescription);
@@ -54,6 +53,15 @@ impl<'a> RawsockInterfaceSet {
             errored.into_iter().map(|i| i.err().unwrap()).collect::<Vec<_>>()
         )
     }
+    pub fn start(&self, interfaces: Vec<RawsockInterface<'a>>) {
+        thread::scope(|s| {
+            for i in &interfaces {
+                s.spawn(move |_| {
+                    i.start_loop()
+                });
+            }
+        }).unwrap();
+    }
     fn create_device(&'a self, desc: InterfaceDescription) -> Result<RawsockInterface<'a>, ErrorWithDesc> {
         let name = &desc.name;
         let interface = self.lib.open_interface(name);
@@ -79,12 +87,15 @@ impl<'a> RawsockInterfaceSet {
                         mac,
                         dummy: &(),
                     }),
-                    Err(err) => Err(ErrorWithDesc(Error::GetMac(err), desc))
+                    Err(err) => Err(ErrorWithDesc(Error::GetAddr(err), desc))
                 }
             }
         }
     }
 }
+
+unsafe impl<'a> Sync for RawsockInterface<'a> {}
+unsafe impl<'a> Send for RawsockInterface<'a> {}
 
 impl<'a> RawsockInterface<'a> {
     pub fn name(&self) -> &String {

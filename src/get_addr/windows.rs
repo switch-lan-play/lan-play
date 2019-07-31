@@ -1,6 +1,6 @@
 extern crate libc;
-use super::{MacAddressError};
-use smoltcp::wire::{EthernetAddress};
+use super::{GetAddressError};
+use smoltcp::wire::{EthernetAddress, IpAddress};
 use std::{mem, ptr};
 
 const NO_ERROR: u32 = 0;
@@ -27,7 +27,7 @@ fn from_u16(s: &[u16]) -> Option<String> {
     return None;
 }
 
-pub fn get_mac(name: &String) -> Result<EthernetAddress, MacAddressError> {
+pub fn get_mac(name: &String) -> Result<EthernetAddress, GetAddressError> {
     if let Some(intf_guid) = get_guid(name) {
         let mut size = 0u32;
         let mut table: *mut MibIftable = ptr::null_mut();
@@ -65,9 +65,9 @@ pub fn get_mac(name: &String) -> Result<EthernetAddress, MacAddressError> {
             }
             libc::free(mem::transmute(table));
         }
-        return Err(MacAddressError::NotFound);
+        return Err(GetAddressError::NotFound);
     }
-    Err(MacAddressError::NotFound)
+    Err(GetAddressError::NotFound)
 }
 
 pub const MAX_INTERFACE_NAME_LEN: usize = 256;
@@ -83,8 +83,8 @@ pub(crate) struct MibIfrow {
     pub dw_speed: u32,
     pub dw_phys_addr_len: u32,
     pub b_phys_addr: [u8; MAXLEN_PHYSADDR],
-    pub _padding1: [u8; 16 * 4],
-    pub _padding2: [u8; MAXLEN_IFDESCR],
+    _padding1: [u8; 16 * 4],
+    _padding2: [u8; MAXLEN_IFDESCR],
 }
 
 #[repr(C)]

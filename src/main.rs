@@ -1,8 +1,10 @@
 extern crate rawsock;
 extern crate smoltcp;
+extern crate crossbeam_utils;
 
 mod rawsock_interface;
-mod get_mac;
+mod get_addr;
+
 use rawsock_interface::{ErrorWithDesc, RawsockInterfaceSet};
 use rawsock::{open_best_library};
 
@@ -16,8 +18,10 @@ fn main() {
         println!("Err: Interface {:?} err {:?}", desc.name, err);
     }
 
-    for mut interface in opened {
+    for interface in &opened {
         let name = interface.name();
         println!("Interface {} opened, mac: {}, data link: {}", name, interface.mac(), interface.data_link());
     }
+
+    set.start(opened);
 }

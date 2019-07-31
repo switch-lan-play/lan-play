@@ -1,15 +1,15 @@
-
 extern crate nix;
-use super::{MacAddressError};
+
+use super::{GetAddressError};
 use smoltcp::wire::{EthernetAddress};
 
-impl From<nix::Error> for MacAddressError {
-    fn from(_: nix::Error) -> MacAddressError {
-        MacAddressError::FailedToCallSystem
+impl From<nix::Error> for GetAddressError {
+    fn from(_: nix::Error) -> GetAddressError {
+        GetAddressError::FailedToCallSystem
     }
 }
 
-pub fn get_mac(name: &String) -> Result<EthernetAddress, MacAddressError> {
+pub fn get_mac(name: &String) -> Result<EthernetAddress, GetAddressError> {
     extern crate nix;
     use nix::{ifaddrs::{getifaddrs}, sys::socket::SockAddr};
     let addrs = getifaddrs()?;
@@ -21,5 +21,5 @@ pub fn get_mac(name: &String) -> Result<EthernetAddress, MacAddressError> {
             return Ok(EthernetAddress(link.addr()));
         }
     }
-    Err(MacAddressError::NotFound)
+    Err(GetAddressError::NotFound)
 }
