@@ -17,7 +17,7 @@ pub enum Error {
 pub struct ErrorWithDesc (pub Error, pub InterfaceDescription);
 
 pub struct RawsockInterfaceSet {
-    lib:        Box<dyn Library + Send>,
+    lib:        Box<dyn Library>,
     all_interf: Vec<rawsock::InterfaceDescription>
 }
 
@@ -114,9 +114,10 @@ impl<'a> RxToken for RawRxToken<'a> {
     fn consume<R, F>(self, _timestamp: Instant, f: F) -> smoltcp::Result<R>
         where F: FnOnce(&[u8]) -> smoltcp::Result<R>
     {
-        // TODO: receive packet into buffer
-        let result = f(&self.0);
-        println!("rx called");
+        let p = &self.0;
+        let len = p.len();
+        let result = f(p);
+        println!("rx called {}", len);
         result
     }
 }

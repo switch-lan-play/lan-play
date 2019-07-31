@@ -5,8 +5,12 @@ extern crate crossbeam_utils;
 mod rawsock_interface;
 mod get_addr;
 
-use rawsock_interface::{ErrorWithDesc, RawsockInterfaceSet, RawsockInterface};
-use smoltcp::{iface::{EthernetInterfaceBuilder, NeighborCache}, wire::{IpAddress, IpCidr}, socket::SocketSet, time::Instant};
+use rawsock_interface::{ErrorWithDesc, RawsockInterfaceSet};
+use smoltcp::{
+    iface::{EthernetInterfaceBuilder, NeighborCache},
+    wire::{IpAddress, IpCidr},
+    socket::{SocketSet, TcpSocket, TcpSocketBuffer},
+    time::Instant};
 use std::collections::BTreeMap;
 
 fn main() {
@@ -24,19 +28,38 @@ fn main() {
         println!("Interface {} opened, mac: {}, data link: {}", name, interface.mac(), interface.data_link());
     }
 
-    let device = opened.pop().unwrap();
+    let device = opened.remove(0);
     let ethernet_addr = device.mac().clone();
     let neighbor_cache = NeighborCache::new(BTreeMap::new());
     let ip_addrs = [
-        IpCidr::new(IpAddress::v4(192, 168, 69, 1), 24),
+        IpCidr::new(IpAddress::v4(192, 168, 233, 1), 24),
     ];
     let mut iface = EthernetInterfaceBuilder::new(device)
             .ethernet_addr(ethernet_addr)
             .neighbor_cache(neighbor_cache)
             .ip_addrs(ip_addrs)
             .finalize();
+    
+    let tcp2_socket = TcpSocket::new(
+        TcpSocketBuffer::new(vec![0; 65535]),
+        TcpSocketBuffer::new(vec![0; 65535])
+    );
+
     let mut sockets = SocketSet::new(vec![]);
+    let tcp2_handle = sockets.add(tcp2_socket);
+
+    {
+        let mut socket = sockets.get::<TcpSocket>(tcp2_handle);
+        socket.listen(1234);
+    }
     loop {
         iface.poll(&mut sockets, Instant::now());
+
+        {
+            let mut socket = sockets.get::<TcpSocket>(tcp2_handle);
+            if socket.can_send() {
+                println!("yeah!!!");
+            }
+        }
     }
 }
