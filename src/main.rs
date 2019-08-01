@@ -10,13 +10,16 @@ use smoltcp::{
     iface::{EthernetInterfaceBuilder, NeighborCache},
     wire::{IpAddress, IpCidr},
     socket::{SocketSet, TcpSocket, TcpSocketBuffer},
-    time::Instant};
+    time::{Instant, Duration}};
 use std::collections::BTreeMap;
 use rawsock::{traits::Library, Error as RawsockError};
+use std::str;
 
 static mut rawsockLib: Result<Box<dyn Library>, RawsockError> = Err(RawsockError::NoPathsProvided);
 
 fn main() {
+    smoltcp::utils::setup_logging("info");
+
     println!("Opening packet capturing library");
 
     let lib = match unsafe {
@@ -43,7 +46,7 @@ fn main() {
     let ethernet_addr = device.mac().clone();
     let neighbor_cache = NeighborCache::new(BTreeMap::new());
     let ip_addrs = [
-        IpCidr::new(IpAddress::v4(192, 168, 233, 2), 24),
+        IpCidr::new(IpAddress::v4(10, 13, 37, 1), 16),
     ];
     let mut iface = EthernetInterfaceBuilder::new(device)
             .ethernet_addr(ethernet_addr)
@@ -52,17 +55,14 @@ fn main() {
             .finalize();
 
     let tcp2_socket = TcpSocket::new(
-        TcpSocketBuffer::new(vec![0; 65535]),
-        TcpSocketBuffer::new(vec![0; 65535])
+        TcpSocketBuffer::new(vec![0; 64]),
+        TcpSocketBuffer::new(vec![0; 128])
     );
 
     let mut sockets = SocketSet::new(vec![]);
     let tcp2_handle = sockets.add(tcp2_socket);
+    let mut tcp2_active = false;
 
-    {
-        let mut socket = sockets.get::<TcpSocket>(tcp2_handle);
-        socket.listen(1234).expect("can not listen to 1234");
-    }
     loop {
         match iface.poll(&mut sockets, Instant::now()) {
             Err(smoltcp::Error::Unrecognized) => continue,
@@ -74,6 +74,39 @@ fn main() {
 
         {
             let mut socket = sockets.get::<TcpSocket>(tcp2_handle);
+
+            if !socket.is_open() {
+                socket.listen(1234).expect("can not listen to 1234");
+                socket.set_keep_alive(Some(Duration::from_millis(1000)));
+                socket.set_timeout(Some(Duration::from_millis(2000)));
+            }
+
+            if socket.is_active() && !tcp2_active {
+                println!("tcp:1234 connected");
+            } else if !socket.is_active() && tcp2_active {
+                println!("tcp:1234 disconnected");
+            }
+            tcp2_active = socket.is_active();
+
+            if socket.may_recv() {
+                let data = socket.recv(|buffer| {
+                    let mut data = buffer.to_owned();
+                    if data.len() > 0 {
+                        println!("tcp:1234 recv data: {:?}",
+                               str::from_utf8(data.as_ref()).unwrap_or("(invalid utf8)"));
+                        data = data.split(|&b| b == b'\n').collect::<Vec<_>>().concat();
+                        data.reverse();
+                        data.extend(b"\n");
+                    }
+                    (data.len(), data)
+                }).unwrap();
+                if socket.can_send() && data.len() > 0 {
+                    println!("tcp:1234 send data: {:?}",
+                           str::from_utf8(data.as_ref()).unwrap_or("(invalid utf8)"));
+                    socket.send_slice(&data[..]).unwrap();
+                }
+            }
+
             if socket.can_send() {
                 println!("yeah!!!");
             }

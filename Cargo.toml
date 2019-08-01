@@ -17,7 +17,8 @@ default-features = false
 features = [
     "std", "log",
     "proto-ipv4",
-    "socket-tcp", "socket-udp", "socket-icmp"
+    "socket-tcp", "socket-udp", "socket-icmp",
+    "verbose"
 ]
 
 # [patch.crates-io.rawsock]
