@@ -39,7 +39,7 @@ fn main() {
         println!("Interface {} opened, mac: {}, data link: {}", name, interface.mac(), interface.data_link());
     }
 
-    let device = opened.remove(0);
+    let device = opened.remove(2);
     let ethernet_addr = device.mac().clone();
     let neighbor_cache = NeighborCache::new(BTreeMap::new());
     let ip_addrs = [
@@ -67,7 +67,7 @@ fn main() {
         match iface.poll(&mut sockets, Instant::now()) {
             Err(smoltcp::Error::Unrecognized) => continue,
             Err(err) => {
-                println!("poll {}", err);
+                println!("poll err {}", err);
             },
             Ok(_) => ()
         }

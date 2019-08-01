@@ -129,11 +129,15 @@ impl<'a> TxToken for RawTxToken {
     fn consume<R, F>(self, _timestamp: Instant, len: usize, f: F) -> smoltcp::Result<R>
         where F: FnOnce(&mut [u8]) -> smoltcp::Result<R>
     {
-        // let result = f();
+        let mut buffer = Vec::new();
+        buffer.resize(len, 0);
+        let result = f(&mut buffer);
         let interface = self.0;
-        println!("tx called {}", len);
-        // TODO: send packet out
-        Err(smoltcp::Error::Exhausted)
+        let sent = interface.borrow_mut().send(&buffer);
+        if !sent.is_ok() {
+            println!("send failed {}", len);
+        }
+        result
     }
 }
 
