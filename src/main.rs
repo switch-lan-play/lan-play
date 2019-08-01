@@ -39,7 +39,7 @@ fn main() {
             .neighbor_cache(neighbor_cache)
             .ip_addrs(ip_addrs)
             .finalize();
-    
+
     let tcp2_socket = TcpSocket::new(
         TcpSocketBuffer::new(vec![0; 65535]),
         TcpSocketBuffer::new(vec![0; 65535])

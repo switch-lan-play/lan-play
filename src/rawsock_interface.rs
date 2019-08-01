@@ -17,17 +17,18 @@ pub enum Error {
 pub struct ErrorWithDesc (pub Error, pub InterfaceDescription);
 
 pub struct RawsockInterfaceSet {
-    lib:        Box<dyn Library>,
+    lib: Box<dyn Library>,
     all_interf: Vec<rawsock::InterfaceDescription>
 }
 
-pub struct RawsockInterface<'a> {
+pub struct RawsockInterface {
     tx_buffer: [u8; 1536],
     pub desc: InterfaceDescription,
-    interface: Arc<Box<dyn Interface<'a> + 'a>>,
+    lib: Box<dyn Library>,
+    interface: Arc<Box<dyn Interface<'static> + 'static>>,
     mac: EthernetAddress,
     data_link: rawsock::DataLink,
-    dummy: &'a (),
+    // dummy: &'a (),
 }
 
 impl<'a> RawsockInterfaceSet {
@@ -42,7 +43,7 @@ impl<'a> RawsockInterfaceSet {
     pub fn lib_version(&self) -> rawsock::LibraryVersion {
         self.lib.version()
     }
-    pub fn open_all_interface(&'a self) -> (Vec<RawsockInterface<'a>>, Vec<ErrorWithDesc>) {
+    pub fn open_all_interface(&'a self) -> (Vec<RawsockInterface>, Vec<ErrorWithDesc>) {
         let all_interf = self.all_interf.clone();
         let (opened, errored): (Vec<_>, _) = all_interf
             .into_iter()
@@ -53,7 +54,7 @@ impl<'a> RawsockInterfaceSet {
             errored.into_iter().map(|i| i.err().unwrap()).collect::<Vec<_>>()
         )
     }
-    pub fn start(&self, interfaces: Vec<RawsockInterface<'a>>) {
+    pub fn start(&self, interfaces: Vec<RawsockInterface>) {
 
         // thread::scope(|s| {
         //     for i in &interfaces {
@@ -63,37 +64,43 @@ impl<'a> RawsockInterfaceSet {
         //     }
         // }).unwrap();
     }
-    fn create_device(&'a self, desc: InterfaceDescription) -> Result<RawsockInterface<'a>, ErrorWithDesc> {
+    fn create_device(&self, desc: InterfaceDescription) -> Result<RawsockInterface, ErrorWithDesc> {
         let name = &desc.name;
-        let interface = self.lib.open_interface(name);
-        match interface {
-            Err(err) => Err(ErrorWithDesc(Error::RawsockErr(err), desc)),
-            Ok(interface) => {
-                let data_link = interface.data_link();
-                if let rawsock::DataLink::Ethernet = data_link {} else {
-                    return Err(ErrorWithDesc(Error::WrongDataLink(data_link), desc));
-                }
-                let interface = Arc::new(interface);
-                match get_mac(name) {
-                    Ok(mac) => Ok(RawsockInterface {
-                        tx_buffer: [0; 1536],
-                        data_link,
-                        desc,
-                        interface,
-                        mac,
-                        dummy: &(),
-                    }),
-                    Err(err) => Err(ErrorWithDesc(Error::GetAddr(err), desc))
-                }
-            }
+        let lib = match rawsock::open_best_library() {
+            Err(err) => return Err(ErrorWithDesc(Error::RawsockErr(err), desc)),
+            Ok(lib) => lib
+        };
+        let interface = match lib.open_interface(name) {
+            Err(err) => return Err(ErrorWithDesc(Error::RawsockErr(err), desc)),
+            Ok(interface) => interface
+        };
+
+        let data_link = interface.data_link();
+        if let rawsock::DataLink::Ethernet = data_link {} else {
+            return Err(ErrorWithDesc(Error::WrongDataLink(data_link), desc));
+        }
+        let interface = Arc::new(interface);
+        match get_mac(name) {
+            Ok(mac) => Ok(RawsockInterface {
+                tx_buffer: [0; 1536],
+                data_link,
+                desc,
+                interface,
+                mac,
+                lib
+            }),
+            Err(err) => Err(ErrorWithDesc(Error::GetAddr(err), desc))
         }
     }
 }
 
-unsafe impl<'a> Sync for RawsockInterface<'a> {}
-unsafe impl<'a> Send for RawsockInterface<'a> {}
+// unsafe impl<'a> Sync for RawsockInterface<'a> {}
+// unsafe impl<'a> Send for RawsockInterface<'a> {}
 
-impl<'a> RawsockInterface<'a> {
+unsafe impl Sync for RawsockInterface {}
+unsafe impl Send for RawsockInterface {}
+
+impl RawsockInterface {
     pub fn name(&self) -> &String {
         &self.desc.name
     }
@@ -136,21 +143,22 @@ impl<'a> TxToken for RawTxToken<'a> {
     }
 }
 
-impl<'a> smoltcp::phy::Device<'a> for RawsockInterface<'a> {
+impl<'a> smoltcp::phy::Device<'a> for RawsockInterface {
     type RxToken = RawRxToken<'a>;
     type TxToken = RawTxToken<'a>;
 
     fn receive(&'a mut self) -> Option<(Self::RxToken, Self::TxToken)> {
         match self.interface.receive() {
             Ok(packet) => Some((RawRxToken(packet),
-              RawTxToken(&mut self.tx_buffer[..], self.interface)
+              RawTxToken(&mut self.tx_buffer[..], self.interface.clone())
             )),
             Err(_) => None
         }
     }
 
     fn transmit(&'a mut self) -> Option<Self::TxToken> {
-        Some(RawTxToken(&mut self.tx_buffer[..], self.interface))
+        let s: Arc<Box<dyn Interface<'a> + 'a>> = self.interface.clone();
+        Some(RawTxToken(&mut self.tx_buffer[..], s))
     }
 
     fn capabilities(&self) -> DeviceCapabilities {
