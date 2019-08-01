@@ -12,10 +12,16 @@ use smoltcp::{
     socket::{SocketSet, TcpSocket, TcpSocketBuffer},
     time::Instant};
 use std::collections::BTreeMap;
+use rawsock::{traits::Library, Error as RawsockError};
 
 fn main() {
     println!("Opening packet capturing library");
-    let set = RawsockInterfaceSet::new().expect("Could not open any packet capturing library");
+    static rawsockLib: Result<Box<dyn Library>, RawsockError> = rawsock::open_best_library();
+    let lib = match rawsockLib {
+        Ok(lib) => lib,
+        Err(err) => panic!(err)
+    };
+    let set = RawsockInterfaceSet::new(&lib).expect("Could not open any packet capturing library");
     println!("Library opened, version is {}", set.lib_version());
     let (mut opened, errored): (Vec<_>, _) = set.open_all_interface();
 
