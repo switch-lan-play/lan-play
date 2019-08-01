@@ -24,7 +24,7 @@ pub struct RawsockInterfaceSet {
 pub struct RawsockInterface {
     tx_buffer: [u8; 1536],
     pub desc: InterfaceDescription,
-    interface: Box<dyn for<'a> Interface<'a>>,
+    interface: Arc<Box<dyn Interface<'static>>>,
     mac: EthernetAddress,
     data_link: rawsock::DataLink,
     // dummy: &'a (),
@@ -64,11 +64,7 @@ impl RawsockInterfaceSet {
     }
     fn create_device(&self, desc: InterfaceDescription) -> Result<RawsockInterface, ErrorWithDesc> {
         let name = &desc.name;
-        // let lib = match rawsock::open_best_library() {
-        //     Err(err) => return Err(ErrorWithDesc(Error::RawsockErr(err), desc)),
-        //     Ok(lib) => lib
-        // };
-        let interface: Box<dyn Interface<'static>> = match self.lib.open_interface(name) {
+        let interface = match self.lib.open_interface(name) {
             Err(err) => return Err(ErrorWithDesc(Error::RawsockErr(err), desc)),
             Ok(interface) => interface
         };
@@ -77,6 +73,7 @@ impl RawsockInterfaceSet {
         if let rawsock::DataLink::Ethernet = data_link {} else {
             return Err(ErrorWithDesc(Error::WrongDataLink(data_link), desc));
         }
+        let interface = Arc::new(interface);
         match get_mac(name) {
             Ok(mac) => Ok(RawsockInterface {
                 tx_buffer: [0; 1536],
@@ -125,36 +122,35 @@ impl<'a> RxToken for RawRxToken<'a> {
 }
 
 
-pub struct RawTxToken<'a>(&'a mut [u8], Arc<Box<Interface<'a> + 'a>>);
+pub struct RawTxToken(Arc<Box<Interface<'static>>>);
 
-impl<'a> TxToken for RawTxToken<'a> {
+impl<'a> TxToken for RawTxToken {
     fn consume<R, F>(self, _timestamp: Instant, len: usize, f: F) -> smoltcp::Result<R>
         where F: FnOnce(&mut [u8]) -> smoltcp::Result<R>
     {
-        let result = f(&mut self.0[..len]);
-        let interface = self.1;
+        // let result = f();
+        let interface = self.0;
         println!("tx called {}", len);
         // TODO: send packet out
-        result
+        Err(smoltcp::Error::Exhausted)
     }
 }
 
 impl<'d> smoltcp::phy::Device<'d> for RawsockInterface {
     type RxToken = RawRxToken<'d>;
-    type TxToken = RawTxToken<'d>;
+    type TxToken = RawTxToken;
 
     fn receive(&'d mut self) -> Option<(Self::RxToken, Self::TxToken)> {
         match self.interface.receive() {
             Ok(packet) => Some((RawRxToken(packet),
-              RawTxToken(&mut self.tx_buffer[..], self.interface.clone())
+              RawTxToken(self.interface.clone())
             )),
             Err(_) => None
         }
     }
 
     fn transmit(&'d mut self) -> Option<Self::TxToken> {
-        let s = self.interface.clone();
-        Some(RawTxToken(&mut self.tx_buffer[..], s))
+        Some(RawTxToken(self.interface.clone()))
     }
 
     fn capabilities(&self) -> DeviceCapabilities {
