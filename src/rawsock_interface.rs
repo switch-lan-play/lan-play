@@ -5,7 +5,8 @@ use smoltcp::wire::{EthernetAddress};
 use rawsock::traits::{Interface, Library};
 use rawsock::InterfaceDescription;
 use crossbeam_utils::thread;
-use std::sync::Arc;
+use std::cell::RefCell;
+use std::rc::Rc;
 
 #[derive(Debug)]
 pub enum Error {
@@ -24,7 +25,7 @@ pub struct RawsockInterfaceSet {
 pub struct RawsockInterface {
     tx_buffer: [u8; 1536],
     pub desc: InterfaceDescription,
-    interface: Arc<Box<dyn Interface<'static>>>,
+    interface: Rc<RefCell<Box<dyn Interface<'static>>>>,
     mac: EthernetAddress,
     data_link: rawsock::DataLink,
     // dummy: &'a (),
@@ -73,7 +74,7 @@ impl RawsockInterfaceSet {
         if let rawsock::DataLink::Ethernet = data_link {} else {
             return Err(ErrorWithDesc(Error::WrongDataLink(data_link), desc));
         }
-        let interface = Arc::new(interface);
+        let interface = Rc::new(RefCell::new(interface));
         match get_mac(name) {
             Ok(mac) => Ok(RawsockInterface {
                 tx_buffer: [0; 1536],
@@ -107,9 +108,9 @@ impl RawsockInterface {
     }
 }
 
-pub struct RawRxToken<'a>(rawsock::BorrowedPacket<'a>);
+pub struct RawRxToken(rawsock::OwnedPacket);
 
-impl<'a> RxToken for RawRxToken<'a> {
+impl RxToken for RawRxToken {
     fn consume<R, F>(self, _timestamp: Instant, f: F) -> smoltcp::Result<R>
         where F: FnOnce(&[u8]) -> smoltcp::Result<R>
     {
@@ -122,7 +123,7 @@ impl<'a> RxToken for RawRxToken<'a> {
 }
 
 
-pub struct RawTxToken(Arc<Box<Interface<'static>>>);
+pub struct RawTxToken(Rc<RefCell<Box<Interface<'static>>>>);
 
 impl<'a> TxToken for RawTxToken {
     fn consume<R, F>(self, _timestamp: Instant, len: usize, f: F) -> smoltcp::Result<R>
@@ -137,12 +138,12 @@ impl<'a> TxToken for RawTxToken {
 }
 
 impl<'d> smoltcp::phy::Device<'d> for RawsockInterface {
-    type RxToken = RawRxToken<'d>;
+    type RxToken = RawRxToken;
     type TxToken = RawTxToken;
 
     fn receive(&'d mut self) -> Option<(Self::RxToken, Self::TxToken)> {
-        match self.interface.receive() {
-            Ok(packet) => Some((RawRxToken(packet),
+        match self.interface.borrow_mut().receive() {
+            Ok(packet) => Some((RawRxToken(packet.into_owned()),
               RawTxToken(self.interface.clone())
             )),
             Err(_) => None

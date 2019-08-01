@@ -14,14 +14,19 @@ use smoltcp::{
 use std::collections::BTreeMap;
 use rawsock::{traits::Library, Error as RawsockError};
 
+static mut rawsockLib: Result<Box<dyn Library>, RawsockError> = Err(RawsockError::NoPathsProvided);
+
 fn main() {
     println!("Opening packet capturing library");
-    static rawsockLib: Result<Box<dyn Library>, RawsockError> = rawsock::open_best_library();
-    let lib = match rawsockLib {
+
+    let lib = match unsafe {
+        rawsockLib = rawsock::open_best_library();
+        &rawsockLib
+    } {
         Ok(lib) => lib,
         Err(err) => panic!(err)
     };
-    let set = RawsockInterfaceSet::new(&lib).expect("Could not open any packet capturing library");
+    let set = RawsockInterfaceSet::new(lib).expect("Could not open any packet capturing library");
     println!("Library opened, version is {}", set.lib_version());
     let (mut opened, errored): (Vec<_>, _) = set.open_all_interface();
 
