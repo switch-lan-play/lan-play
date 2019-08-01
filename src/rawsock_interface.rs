@@ -5,6 +5,7 @@ use smoltcp::wire::{EthernetAddress};
 use rawsock::traits::{Interface, Library};
 use rawsock::InterfaceDescription;
 use crossbeam_utils::thread;
+use std::sync::Arc;
 
 #[derive(Debug)]
 pub enum Error {
@@ -23,7 +24,7 @@ pub struct RawsockInterfaceSet {
 pub struct RawsockInterface<'a> {
     tx_buffer: [u8; 1536],
     pub desc: InterfaceDescription,
-    interface: Box<dyn Interface<'a> + 'a>,
+    interface: Arc<Box<dyn Interface<'a> + 'a>>,
     mac: EthernetAddress,
     data_link: rawsock::DataLink,
     dummy: &'a (),
@@ -72,6 +73,7 @@ impl<'a> RawsockInterfaceSet {
                 if let rawsock::DataLink::Ethernet = data_link {} else {
                     return Err(ErrorWithDesc(Error::WrongDataLink(data_link), desc));
                 }
+                let interface = Arc::new(interface);
                 match get_mac(name) {
                     Ok(mac) => Ok(RawsockInterface {
                         tx_buffer: [0; 1536],
@@ -120,7 +122,7 @@ impl<'a> RxToken for RawRxToken<'a> {
 }
 
 
-pub struct RawTxToken<'a>(&'a mut [u8], &'a Box<Interface<'a> + 'a>);
+pub struct RawTxToken<'a>(&'a mut [u8], Arc<Box<Interface<'a> + 'a>>);
 
 impl<'a> TxToken for RawTxToken<'a> {
     fn consume<R, F>(self, _timestamp: Instant, len: usize, f: F) -> smoltcp::Result<R>
@@ -134,7 +136,7 @@ impl<'a> TxToken for RawTxToken<'a> {
     }
 }
 
-impl<'a, 'b> smoltcp::phy::Device<'a> for RawsockInterface<'b> {
+impl<'a> smoltcp::phy::Device<'a> for RawsockInterface<'a> {
     type RxToken = RawRxToken<'a>;
     type TxToken = RawTxToken<'a>;
 
@@ -148,7 +150,7 @@ impl<'a, 'b> smoltcp::phy::Device<'a> for RawsockInterface<'b> {
     }
 
     fn transmit(&'a mut self) -> Option<Self::TxToken> {
-        Some(RawTxToken(&mut self.tx_buffer[..]))
+        Some(RawTxToken(&mut self.tx_buffer[..], self.interface))
     }
 
     fn capabilities(&self) -> DeviceCapabilities {
