@@ -1,6 +1,7 @@
 extern crate rawsock;
 extern crate smoltcp;
 extern crate crossbeam_utils;
+extern crate env_logger;
 
 mod rawsock_interface;
 mod get_addr;
@@ -14,17 +15,17 @@ use smoltcp::{
 use std::collections::BTreeMap;
 use rawsock::{traits::Library, Error as RawsockError};
 use std::str;
+use env_logger::LogBuilder;
 
-static mut rawsockLib: Result<Box<dyn Library>, RawsockError> = Err(RawsockError::NoPathsProvided);
+static mut RAWSOCK_LIB: Result<Box<dyn Library>, RawsockError> = Err(RawsockError::NoPathsProvided);
 
 fn main() {
-    smoltcp::utils::setup_logging("info");
-
+    env_logger::init();
     println!("Opening packet capturing library");
 
     let lib = match unsafe {
-        rawsockLib = rawsock::open_best_library();
-        &rawsockLib
+        RAWSOCK_LIB = rawsock::open_best_library();
+        &RAWSOCK_LIB
     } {
         Ok(lib) => lib,
         Err(err) => panic!(err)
@@ -42,11 +43,11 @@ fn main() {
         println!("Interface {} opened, mac: {}, data link: {}", name, interface.mac(), interface.data_link());
     }
 
-    let device = opened.remove(2);
+    let device = opened.remove(0);
     let ethernet_addr = device.mac().clone();
     let neighbor_cache = NeighborCache::new(BTreeMap::new());
     let ip_addrs = [
-        IpCidr::new(IpAddress::v4(10, 13, 37, 1), 16),
+        IpCidr::new(IpAddress::v4(192, 168, 23, 20), 24),
     ];
     let mut iface = EthernetInterfaceBuilder::new(device)
             .ethernet_addr(ethernet_addr)
@@ -64,14 +65,6 @@ fn main() {
     let mut tcp2_active = false;
 
     loop {
-        match iface.poll(&mut sockets, Instant::now()) {
-            Err(smoltcp::Error::Unrecognized) => continue,
-            Err(err) => {
-                println!("poll err {}", err);
-            },
-            Ok(_) => ()
-        }
-
         {
             let mut socket = sockets.get::<TcpSocket>(tcp2_handle);
 
@@ -109,7 +102,17 @@ fn main() {
 
             if socket.can_send() {
                 println!("yeah!!!");
+                socket.send_slice(b"yeah");
             }
+
+            println!("  state: {}", socket.state());
+        }
+        match iface.poll(&mut sockets, Instant::now()) {
+            Err(smoltcp::Error::Unrecognized) => continue,
+            Err(err) => {
+                println!("poll err {}", err);
+            },
+            Ok(_) => ()
         }
     }
 }

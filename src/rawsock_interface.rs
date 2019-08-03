@@ -23,7 +23,7 @@ pub struct RawsockInterfaceSet {
 }
 
 pub struct RawsockInterface {
-    tx_buffer: [u8; 1536],
+    shit: bool,
     pub desc: InterfaceDescription,
     interface: Rc<RefCell<Box<dyn Interface<'static>>>>,
     mac: EthernetAddress,
@@ -77,7 +77,7 @@ impl RawsockInterfaceSet {
         let interface = Rc::new(RefCell::new(interface));
         match get_mac(name) {
             Ok(mac) => Ok(RawsockInterface {
-                tx_buffer: [0; 1536],
+                shit: false,
                 data_link,
                 desc,
                 interface,
@@ -117,7 +117,6 @@ impl RxToken for RawRxToken {
         let p = &self.0;
         let len = p.len();
         let result = f(p);
-        // println!("rx called {}", len);
         result
     }
 }
@@ -146,11 +145,16 @@ impl<'d> smoltcp::phy::Device<'d> for RawsockInterface {
     type TxToken = RawTxToken;
 
     fn receive(&'d mut self) -> Option<(Self::RxToken, Self::TxToken)> {
-        match self.interface.borrow_mut().receive() {
-            Ok(packet) => Some((RawRxToken(packet.into_owned()),
-              RawTxToken(self.interface.clone())
-            )),
-            Err(_) => None
+        self.shit = !self.shit;
+        if self.shit {
+            None
+        } else {
+            match self.interface.borrow_mut().receive() {
+                Ok(packet) => Some((RawRxToken(packet.into_owned()),
+                RawTxToken(self.interface.clone())
+                )),
+                Err(_) => None
+            }
         }
     }
 
