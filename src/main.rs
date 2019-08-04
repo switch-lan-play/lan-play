@@ -5,6 +5,7 @@ extern crate env_logger;
 
 mod rawsock_interface;
 mod get_addr;
+mod duplex;
 
 use rawsock_interface::{ErrorWithDesc, RawsockInterfaceSet};
 use smoltcp::{
@@ -15,7 +16,6 @@ use smoltcp::{
 use std::collections::BTreeMap;
 use rawsock::{traits::Library, Error as RawsockError};
 use std::str;
-use env_logger::LogBuilder;
 
 static mut RAWSOCK_LIB: Result<Box<dyn Library>, RawsockError> = Err(RawsockError::NoPathsProvided);
 

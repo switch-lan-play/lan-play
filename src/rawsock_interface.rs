@@ -9,9 +9,12 @@ use smoltcp::{
     iface::{EthernetInterfaceBuilder, NeighborCache, EthernetInterface},
     wire::{IpAddress, IpCidr, EthernetAddress},
     socket::{SocketSet, TcpSocket, TcpSocketBuffer},
-    time::{Instant, Duration}};
+    time::{Instant, Duration},
+};
 use std::collections::BTreeMap;
+use crate::duplex::ChannelPort;
 
+type Packet = Vec<u8>;
 #[derive(Debug)]
 pub enum Error {
     RawsockErr(rawsock::Error),
@@ -27,12 +30,18 @@ pub struct RawsockInterfaceSet {
     ip: smoltcp::wire::IpCidr,
 }
 
-pub struct RawsockInterface {
+pub struct RawsockDevice {
     shit: bool,
-    pub desc: InterfaceDescription,
     interface: Rc<RefCell<Box<dyn Interface<'static>>>>,
+    port: ChannelPort<Packet>,
+}
+
+pub struct RawsockInterface {
+    pub desc: InterfaceDescription,
     mac: EthernetAddress,
     data_link: rawsock::DataLink,
+    device: RawsockDevice,
+    port: ChannelPort<Packet>,
     // dummy: &'a (),
 }
 
@@ -70,8 +79,9 @@ impl RawsockInterfaceSet {
             }
         }).unwrap();
     }
-    fn make_iface<'a, 'b, 'c>(&self, device: RawsockInterface) -> EthernetInterface<'a, 'b, 'c, RawsockInterface> {
-        let ethernet_addr = device.mac().clone();
+    fn make_iface<'a, 'b, 'c>(&self, interf: RawsockInterface) -> EthernetInterface<'a, 'b, 'c, RawsockDevice> {
+        let device = interf.device;
+        let ethernet_addr = interf.mac().clone();
         let neighbor_cache = NeighborCache::new(BTreeMap::new());
         let ip_addrs = [
             self.ip,
@@ -95,12 +105,19 @@ impl RawsockInterfaceSet {
             return Err(ErrorWithDesc(Error::WrongDataLink(data_link), desc));
         }
         let interface = Rc::new(RefCell::new(interface));
+
+        let (port1, port2) = ChannelPort::new();
+
         match get_mac(name) {
             Ok(mac) => Ok(RawsockInterface {
-                shit: false,
                 data_link,
                 desc,
-                interface,
+                port: port1,
+                device: RawsockDevice {
+                    shit: true,
+                    interface,
+                    port: port2
+                },
                 mac,
             }),
             Err(err) => Err(ErrorWithDesc(Error::GetAddr(err), desc))
@@ -108,8 +125,8 @@ impl RawsockInterfaceSet {
     }
 }
 
-unsafe impl Sync for RawsockInterface {}
-unsafe impl Send for RawsockInterface {}
+unsafe impl Sync for RawsockDevice {}
+unsafe impl Send for RawsockDevice {}
 
 impl RawsockInterface {
     pub fn name(&self) -> &String {
@@ -157,7 +174,7 @@ impl<'a> TxToken for RawTxToken {
     }
 }
 
-impl<'d> smoltcp::phy::Device<'d> for RawsockInterface {
+impl<'d> smoltcp::phy::Device<'d> for RawsockDevice {
     type RxToken = RawRxToken;
     type TxToken = RawTxToken;
 
