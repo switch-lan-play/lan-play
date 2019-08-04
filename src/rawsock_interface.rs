@@ -12,7 +12,7 @@ use smoltcp::{
     time::{Instant, Duration},
 };
 use std::collections::BTreeMap;
-use crate::duplex::ChannelPort;
+use crate::duplex::{ChannelPort, Sender};
 
 type Packet = Vec<u8>;
 #[derive(Debug)]
@@ -142,7 +142,7 @@ impl RawsockInterface {
     }
 }
 
-pub struct RawRxToken(rawsock::OwnedPacket);
+pub struct RawRxToken(Packet);
 
 impl RxToken for RawRxToken {
     fn consume<R, F>(self, _timestamp: Instant, f: F) -> smoltcp::Result<R>
@@ -156,7 +156,7 @@ impl RxToken for RawRxToken {
 }
 
 
-pub struct RawTxToken(Rc<RefCell<Box<Interface<'static>>>>);
+pub struct RawTxToken(Sender::<Packet>);
 
 impl<'a> TxToken for RawTxToken {
     fn consume<R, F>(self, _timestamp: Instant, len: usize, f: F) -> smoltcp::Result<R>
@@ -165,8 +165,8 @@ impl<'a> TxToken for RawTxToken {
         let mut buffer = Vec::new();
         buffer.resize(len, 0);
         let result = f(&mut buffer);
-        let interface = self.0;
-        let sent = interface.borrow_mut().send(&buffer);
+        let sender = self.0;
+        let sent = sender.send(buffer);
         if !sent.is_ok() {
             println!("send failed {}", len);
         }
@@ -179,21 +179,17 @@ impl<'d> smoltcp::phy::Device<'d> for RawsockDevice {
     type TxToken = RawTxToken;
 
     fn receive(&'d mut self) -> Option<(Self::RxToken, Self::TxToken)> {
-        self.shit = !self.shit;
-        if self.shit {
-            None
-        } else {
-            match self.interface.borrow_mut().receive() {
-                Ok(packet) => Some((RawRxToken(packet.into_owned()),
-                RawTxToken(self.interface.clone())
-                )),
-                Err(_) => None
-            }
+        match self.port.try_recv() {
+            Ok(packet) => Some((
+                RawRxToken(packet),
+                RawTxToken(self.port.clone_sender())
+            )),
+            Err(_) => None
         }
     }
 
     fn transmit(&'d mut self) -> Option<Self::TxToken> {
-        Some(RawTxToken(self.interface.clone()))
+        Some(RawTxToken(self.port.clone_sender()))
     }
 
     fn capabilities(&self) -> DeviceCapabilities {
