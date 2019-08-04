@@ -1,12 +1,16 @@
 use crate::get_addr::{get_mac, GetAddressError};
 use smoltcp::phy::{DeviceCapabilities,RxToken,TxToken};
-use smoltcp::time::Instant;
-use smoltcp::wire::{EthernetAddress};
 use rawsock::traits::{Interface, Library};
 use rawsock::InterfaceDescription;
 use crossbeam_utils::thread;
 use std::cell::RefCell;
 use std::rc::Rc;
+use smoltcp::{
+    iface::{EthernetInterfaceBuilder, NeighborCache, EthernetInterface},
+    wire::{IpAddress, IpCidr, EthernetAddress},
+    socket::{SocketSet, TcpSocket, TcpSocketBuffer},
+    time::{Instant, Duration}};
+use std::collections::BTreeMap;
 
 #[derive(Debug)]
 pub enum Error {
@@ -20,6 +24,7 @@ pub struct ErrorWithDesc (pub Error, pub InterfaceDescription);
 pub struct RawsockInterfaceSet {
     lib: &'static Box<dyn Library>,
     all_interf: Vec<rawsock::InterfaceDescription>,
+    ip: smoltcp::wire::IpCidr,
 }
 
 pub struct RawsockInterface {
@@ -37,6 +42,7 @@ impl RawsockInterfaceSet {
         Ok(RawsockInterfaceSet {
             lib,
             all_interf,
+            ip: IpCidr::new(IpAddress::v4(192, 168, 23, 20), 24),
         })
     }
     pub fn lib_version(&self) -> rawsock::LibraryVersion {
@@ -54,14 +60,28 @@ impl RawsockInterfaceSet {
         )
     }
     pub fn start(&self, interfaces: Vec<RawsockInterface>) {
-
-        // thread::scope(|s| {
-        //     for i in &interfaces {
-        //         s.spawn(move |_| {
-        //             i.start_loop()
-        //         });
-        //     }
-        // }).unwrap();
+        let mut sockets = SocketSet::new(vec![]);
+        let interfs = interfaces.into_iter().map(|i| { self.make_iface(i) });
+        thread::scope(move |s| {
+            for i in interfs {
+                s.spawn(move |_| {
+                    
+                });
+            }
+        }).unwrap();
+    }
+    fn make_iface<'a, 'b, 'c>(&self, device: RawsockInterface) -> EthernetInterface<'a, 'b, 'c, RawsockInterface> {
+        let ethernet_addr = device.mac().clone();
+        let neighbor_cache = NeighborCache::new(BTreeMap::new());
+        let ip_addrs = [
+            self.ip,
+        ];
+        let mut iface = EthernetInterfaceBuilder::new(device)
+                .ethernet_addr(ethernet_addr)
+                .neighbor_cache(neighbor_cache)
+                .ip_addrs(ip_addrs)
+                .finalize();
+        iface
     }
     fn create_device(&self, desc: InterfaceDescription) -> Result<RawsockInterface, ErrorWithDesc> {
         let name = &desc.name;
@@ -87,9 +107,6 @@ impl RawsockInterfaceSet {
         }
     }
 }
-
-// unsafe impl<'a> Sync for RawsockInterface<'a> {}
-// unsafe impl<'a> Send for RawsockInterface<'a> {}
 
 unsafe impl Sync for RawsockInterface {}
 unsafe impl Send for RawsockInterface {}
