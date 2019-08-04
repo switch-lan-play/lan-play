@@ -70,16 +70,16 @@ impl RawsockInterfaceSet {
     }
     pub fn start(&self, interfaces: Vec<RawsockInterface>) {
         let mut sockets = SocketSet::new(vec![]);
-        let interfs = interfaces.into_iter().map(|i| { self.make_iface(i) });
+        let interfs: Vec<_> = interfaces.into_iter().map(|i| { self.make_iface(i) }).collect();
         thread::scope(move |s| {
-            for i in interfs {
+            for (dev, port) in &interfs {
                 s.spawn(move |_| {
                     
                 });
             }
         }).unwrap();
     }
-    fn make_iface<'a, 'b, 'c>(&self, interf: RawsockInterface) -> EthernetInterface<'a, 'b, 'c, RawsockDevice> {
+    fn make_iface<'a, 'b, 'c>(&self, interf: RawsockInterface) -> (EthernetInterface<'a, 'b, 'c, RawsockDevice>, ChannelPort<Packet>) {
         let device = interf.device;
         let ethernet_addr = interf.mac().clone();
         let neighbor_cache = NeighborCache::new(BTreeMap::new());
@@ -91,7 +91,7 @@ impl RawsockInterfaceSet {
                 .neighbor_cache(neighbor_cache)
                 .ip_addrs(ip_addrs)
                 .finalize();
-        iface
+        (iface, interf.port)
     }
     fn create_device(&self, desc: InterfaceDescription) -> Result<RawsockInterface, ErrorWithDesc> {
         let name = &desc.name;
