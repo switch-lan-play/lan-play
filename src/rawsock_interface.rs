@@ -1,10 +1,11 @@
+use std::sync::Arc;
+use std::ops::{Deref, DerefMut};
+use std::cell::RefCell;
 use crate::get_addr::{get_mac, GetAddressError};
 use smoltcp::phy::{DeviceCapabilities,RxToken,TxToken};
 use rawsock::traits::{Interface, Library};
 use rawsock::InterfaceDescription;
 use crossbeam_utils::thread;
-use std::cell::RefCell;
-use std::rc::Rc;
 use smoltcp::{
     iface::{EthernetInterfaceBuilder, NeighborCache, EthernetInterface},
     wire::{IpAddress, IpCidr, EthernetAddress},
@@ -13,6 +14,7 @@ use smoltcp::{
 };
 use std::collections::BTreeMap;
 use crate::duplex::{ChannelPort, Sender};
+use log::{info, trace, warn, debug};
 
 type Packet = Vec<u8>;
 #[derive(Debug)]
@@ -31,9 +33,12 @@ pub struct RawsockInterfaceSet {
 }
 
 pub struct RawsockDevice {
-    shit: bool,
-    interface: Rc<RefCell<Box<dyn Interface<'static>>>>,
     port: ChannelPort<Packet>,
+}
+
+pub struct RawsockRunner {
+    port: ChannelPort<Packet>,
+    interface: Arc<InterfaceMT>,
 }
 
 pub struct RawsockInterface {
@@ -42,7 +47,18 @@ pub struct RawsockInterface {
     data_link: rawsock::DataLink,
     device: RawsockDevice,
     port: ChannelPort<Packet>,
+    interface: InterfaceMT,
     // dummy: &'a (),
+}
+
+struct InterfaceMT (RefCell<Box<dyn Interface<'static>>>);
+unsafe impl Sync for InterfaceMT {}
+unsafe impl Send for InterfaceMT {}
+impl Deref for InterfaceMT {
+    type Target = RefCell<Box<dyn Interface<'static>>>;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
 }
 
 impl RawsockInterfaceSet {
@@ -68,30 +84,60 @@ impl RawsockInterfaceSet {
             errored.into_iter().map(|i| i.err().unwrap()).collect::<Vec<_>>()
         )
     }
+
     pub fn start(&self, interfaces: Vec<RawsockInterface>) {
-        let mut sockets = SocketSet::new(vec![]);
-        let interfs: Vec<_> = interfaces.into_iter().map(|i| { self.make_iface(i) }).collect();
+        let sockets = SocketSet::new(vec![]);
+        let (_devs, runners): (Vec<_>, Vec<_>) = interfaces
+            .into_iter()
+            .map(|i| { self.make_iface(i) })
+            .unzip();
         thread::scope(move |s| {
-            for (dev, port) in &interfs {
+            for runner in runners {
+                let sender = runner.port.clone_sender();
+                let interf = runner.interface.clone();
                 s.spawn(move |_| {
-                    
+                    while let Ok(packet) = interf.borrow_mut().receive() {
+                        match sender.send(packet.into_owned().to_vec()) {
+                            Ok(_) => (),
+                            Err(err) => warn!("recv error: {:?}", err)
+                        }
+                    }
+                    debug!("recv thread exit");
+                });
+                s.spawn(move |_| {
+                    let port = runner.port;
+                    let interf = runner.interface.clone();
+                    while let Ok(to_send) = port.recv() {
+                        match interf.borrow().send(&to_send) {
+                            Ok(_) => (),
+                            Err(err) => warn!("send error: {:?}", err)
+                        }
+                    }
+                    debug!("send thread exit");
                 });
             }
         }).unwrap();
     }
-    fn make_iface<'a, 'b, 'c>(&self, interf: RawsockInterface) -> (EthernetInterface<'a, 'b, 'c, RawsockDevice>, ChannelPort<Packet>) {
-        let device = interf.device;
+    fn make_iface<'a, 'b, 'c>(&self, interf: RawsockInterface) -> (
+            EthernetInterface<'a, 'b, 'c, RawsockDevice>,
+            RawsockRunner
+    ) {
         let ethernet_addr = interf.mac().clone();
+        let device = interf.device;
+        let interface = Arc::new(interf.interface);
         let neighbor_cache = NeighborCache::new(BTreeMap::new());
         let ip_addrs = [
             self.ip,
         ];
-        let mut iface = EthernetInterfaceBuilder::new(device)
+        let iface = EthernetInterfaceBuilder::new(device)
                 .ethernet_addr(ethernet_addr)
                 .neighbor_cache(neighbor_cache)
                 .ip_addrs(ip_addrs)
                 .finalize();
-        (iface, interf.port)
+        (iface, RawsockRunner {
+            port: interf.port,
+            interface
+        })
     }
     fn create_device(&self, desc: InterfaceDescription) -> Result<RawsockInterface, ErrorWithDesc> {
         let name = &desc.name;
@@ -104,9 +150,9 @@ impl RawsockInterfaceSet {
         if let rawsock::DataLink::Ethernet = data_link {} else {
             return Err(ErrorWithDesc(Error::WrongDataLink(data_link), desc));
         }
-        let interface = Rc::new(RefCell::new(interface));
 
         let (port1, port2) = ChannelPort::new();
+        let interface = InterfaceMT(RefCell::new(interface));
 
         match get_mac(name) {
             Ok(mac) => Ok(RawsockInterface {
@@ -114,19 +160,15 @@ impl RawsockInterfaceSet {
                 desc,
                 port: port1,
                 device: RawsockDevice {
-                    shit: true,
-                    interface,
                     port: port2
                 },
                 mac,
+                interface,
             }),
             Err(err) => Err(ErrorWithDesc(Error::GetAddr(err), desc))
         }
     }
 }
-
-unsafe impl Sync for RawsockDevice {}
-unsafe impl Send for RawsockDevice {}
 
 impl RawsockInterface {
     pub fn name(&self) -> &String {
