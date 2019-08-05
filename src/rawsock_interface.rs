@@ -5,7 +5,7 @@ use crate::get_addr::{get_mac, GetAddressError};
 use smoltcp::phy::{DeviceCapabilities,RxToken,TxToken};
 use rawsock::traits::{DynamicInterface as Interface, Library};
 use rawsock::InterfaceDescription;
-use crossbeam_utils::thread;
+use crossbeam_utils::{thread, sync::Parker};
 use smoltcp::{
     iface::{EthernetInterfaceBuilder, NeighborCache, EthernetInterface},
     wire::{IpAddress, IpCidr, EthernetAddress},
@@ -86,22 +86,25 @@ impl RawsockInterfaceSet {
     }
 
     pub fn start(&self, interfaces: Vec<RawsockInterface>) {
-        let sockets = SocketSet::new(vec![]);
-        let (_devs, runners): (Vec<_>, Vec<_>) = interfaces
+        let mut sockets = SocketSet::new(vec![]);
+        let (mut devs, runners): (Vec<_>, Vec<_>) = interfaces
             .into_iter()
             .map(|i| { self.make_iface(i) })
             .unzip();
         thread::scope(move |s| {
+            let mut parker = Parker::new();
             for runner in runners {
                 let sender = runner.port.clone_sender();
                 let interf = runner.interface.clone();
+                let unparker = parker.unparker().clone();
                 s.spawn(move |_| {
-                    while let Ok(packet) = interf.borrow_mut().receive() {
-                        match sender.send(packet.into_owned().to_vec()) {
+                    interf.borrow_mut().loop_infinite(&mut |packet| {
+                        unparker.unpark();
+                        match sender.send(packet.as_owned().to_vec()) {
                             Ok(_) => (),
                             Err(err) => warn!("recv error: {:?}", err)
                         }
-                    }
+                    });
                     debug!("recv thread exit");
                 });
                 s.spawn(move |_| {
@@ -116,6 +119,20 @@ impl RawsockInterfaceSet {
                     debug!("send thread exit");
                 });
             }
+            s.spawn(move |_| {
+                loop {
+                    parker.park();
+                    for mut dev in &mut devs {
+                        match dev.poll(&mut sockets, Instant::now()) {
+                            Err(smoltcp::Error::Unrecognized) => continue,
+                            Err(err) => {
+                                println!("poll err {}", err);
+                            },
+                            Ok(_) => ()
+                        }
+                    }
+                }
+            });
         }).unwrap();
     }
     fn make_iface<'a, 'b, 'c>(&self, interf: RawsockInterface) -> (
