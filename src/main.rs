@@ -9,13 +9,9 @@ mod duplex;
 
 use rawsock_interface::{ErrorWithDesc, RawsockInterfaceSet};
 use smoltcp::{
-    iface::{EthernetInterfaceBuilder, NeighborCache},
-    wire::{IpAddress, IpCidr},
     socket::{SocketSet, TcpSocket, TcpSocketBuffer},
-    time::{Instant, Duration}};
-use std::collections::BTreeMap;
+};
 use rawsock::{traits::Library, Error as RawsockError};
-use std::str;
 
 static mut RAWSOCK_LIB: Result<Box<dyn Library>, RawsockError> = Err(RawsockError::NoPathsProvided);
 

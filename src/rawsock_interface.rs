@@ -1,5 +1,5 @@
 use std::sync::Arc;
-use std::ops::{Deref, DerefMut};
+use std::ops::{Deref};
 use std::cell::RefCell;
 use crate::get_addr::{get_mac, GetAddressError};
 use smoltcp::phy::{DeviceCapabilities,RxToken,TxToken};
@@ -9,12 +9,12 @@ use crossbeam_utils::{thread, sync::Parker};
 use smoltcp::{
     iface::{EthernetInterfaceBuilder, NeighborCache, EthernetInterface},
     wire::{IpAddress, IpCidr, EthernetAddress},
-    socket::{SocketSet, TcpSocket, TcpSocketBuffer},
-    time::{Instant, Duration},
+    socket::{SocketSet},
+    time::{Instant},
 };
 use std::collections::BTreeMap;
 use crate::duplex::{ChannelPort, Sender};
-use log::{info, trace, warn, debug};
+use log::{warn, debug};
 
 type Packet = Vec<u8>;
 #[derive(Debug)]
@@ -203,7 +203,7 @@ pub struct RawRxToken(Packet);
 
 impl RxToken for RawRxToken {
     fn consume<R, F>(self, _timestamp: Instant, f: F) -> smoltcp::Result<R>
-        where F: FnOnce(&[u8]) -> smoltcp::Result<R>
+        where F: (FnOnce(&[u8]) -> smoltcp::Result<R>)
     {
         let p = &self.0;
         let len = p.len();

@@ -1,6 +1,6 @@
 extern crate libc;
 use super::{GetAddressError};
-use smoltcp::wire::{EthernetAddress, IpAddress};
+use smoltcp::wire::{EthernetAddress};
 use std::{mem, ptr};
 
 const NO_ERROR: u32 = 0;
