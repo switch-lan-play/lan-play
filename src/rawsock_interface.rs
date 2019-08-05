@@ -3,7 +3,7 @@ use std::ops::{Deref, DerefMut};
 use std::cell::RefCell;
 use crate::get_addr::{get_mac, GetAddressError};
 use smoltcp::phy::{DeviceCapabilities,RxToken,TxToken};
-use rawsock::traits::{Interface, Library};
+use rawsock::traits::{DynamicInterface as Interface, Library};
 use rawsock::InterfaceDescription;
 use crossbeam_utils::thread;
 use smoltcp::{
@@ -179,8 +179,6 @@ impl RawsockInterface {
     }
     pub fn data_link(&self) -> rawsock::DataLink {
         self.data_link
-    }
-    pub fn start_loop(&self) {
     }
 }
 

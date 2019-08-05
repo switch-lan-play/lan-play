@@ -22,6 +22,7 @@ static mut RAWSOCK_LIB: Result<Box<dyn Library>, RawsockError> = Err(RawsockErro
 fn main() {
     env_logger::init();
     println!("Opening packet capturing library");
+    let shit = rawsock::pcap::Library::open_default_paths();
 
     let lib = match unsafe {
         RAWSOCK_LIB = rawsock::open_best_library();
