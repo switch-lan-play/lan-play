@@ -20,16 +20,17 @@ features = [
     "std", "log",
     "proto-ipv4", "proto-ipv6",
     "socket-tcp", "socket-udp", "socket-icmp",
-    "verbose"
+    "verbose",
+    "socket-accept-all"
 ]
 
 [patch.crates-io.rawsock]
-# git = "https://github.com/spacemeowx2/rust-rawsock.git"
-# branch = "loop_infinite-dynamic"
-path = '../rust-rawsock'
+git = "https://github.com/spacemeowx2/rust-rawsock.git"
+branch = "loop_infinite-dynamic"
+# path = '../rust-rawsock'
 
-[patch.'https://github.com/switch-lan-play/smoltcp.git'.smoltcp]
-path = '../smoltcp'
+# [patch.'https://github.com/switch-lan-play/smoltcp.git'.smoltcp]
+# path = '../smoltcp'
 
 [target.'cfg(windows)'.dependencies]
 libc = "0.2"

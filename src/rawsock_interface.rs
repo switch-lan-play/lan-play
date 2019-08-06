@@ -85,26 +85,28 @@ impl RawsockInterfaceSet {
         )
     }
 
-    pub fn start(&self, interfaces: Vec<RawsockInterface>) {
-        let mut sockets = SocketSet::new(vec![]);
+    pub fn start(&self, sockets: &mut SocketSet<'_, '_, '_>, interfaces: Vec<RawsockInterface>, f: &mut FnMut(&mut SocketSet)) {
         let (mut devs, runners): (Vec<_>, Vec<_>) = interfaces
             .into_iter()
             .map(|i| { self.make_iface(i) })
             .unzip();
         thread::scope(move |s| {
-            let mut parker = Parker::new();
+            let parker = Parker::new();
             for runner in runners {
                 let sender = runner.port.clone_sender();
                 let interf = runner.interface.clone();
                 let unparker = parker.unparker().clone();
                 s.spawn(move |_| {
-                    interf.borrow_mut().loop_infinite(&mut |packet| {
+                    let r = interf.borrow().loop_infinite(&mut |packet| {
                         unparker.unpark();
                         match sender.send(packet.as_owned().to_vec()) {
                             Ok(_) => (),
                             Err(err) => warn!("recv error: {:?}", err)
                         }
                     });
+                    if !r.is_ok() {
+                        warn!("loop_infinite {:?}", r);
+                    }
                     debug!("recv thread exit");
                 });
                 s.spawn(move |_| {
@@ -119,20 +121,19 @@ impl RawsockInterfaceSet {
                     debug!("send thread exit");
                 });
             }
-            s.spawn(move |_| {
-                loop {
-                    parker.park();
-                    for mut dev in &mut devs {
-                        match dev.poll(&mut sockets, Instant::now()) {
-                            Err(smoltcp::Error::Unrecognized) => continue,
-                            Err(err) => {
-                                println!("poll err {}", err);
-                            },
-                            Ok(_) => ()
-                        }
+            loop {
+                f(sockets);
+                parker.park();
+                for dev in &mut devs {
+                    match dev.poll(sockets, Instant::now()) {
+                        Err(smoltcp::Error::Unrecognized) => continue,
+                        Err(err) => {
+                            println!("poll err {}", err);
+                        },
+                        Ok(_) => ()
                     }
                 }
-            });
+            }
         }).unwrap();
     }
     fn make_iface<'a, 'b, 'c>(&self, interf: RawsockInterface) -> (
@@ -206,7 +207,6 @@ impl RxToken for RawRxToken {
         where F: (FnOnce(&[u8]) -> smoltcp::Result<R>)
     {
         let p = &self.0;
-        let len = p.len();
         let result = f(p);
         result
     }
