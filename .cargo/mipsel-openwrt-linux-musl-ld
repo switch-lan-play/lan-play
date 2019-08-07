@@ -1,0 +1,10 @@
+#!/bin/bash
+
+for arg do
+  shift
+  [ "$arg" = "-lgcc_s" ] && continue
+  set -- "$@" "$arg"
+done
+
+IMG_ID=`docker build -q -f docker/Dockerfile.openwrt .`
+docker run -i --rm -v $PWD:$PWD -v /var/folders/lm/:/var/folders/lm/ -v /Users/space/.rustup:/Users/space/.rustup $IMG_ID /sdk/openwrt-sdk-18.06.1-ramips-mt7621_gcc-7.3.0_musl.Linux-x86_64/staging_dir/toolchain-mipsel_24kc_gcc-7.3.0_musl/mipsel-openwrt-linux/bin/ld $@
