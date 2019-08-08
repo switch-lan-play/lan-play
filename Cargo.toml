@@ -5,11 +5,13 @@ authors = ["spacemeowx2 <spacemeowx2@gmail.com>"]
 edition = "2018"
 
 [dependencies]
-tokio = "0.1"
+tokio = "0.2"
 rawsock = "0.2.1"
 crossbeam-utils = "0.6"
 env_logger = "0.4"
 log = "0.4"
+hyper = "0.12"
+futures = "0.1"
 
 [dependencies.smoltcp]
 # version = "0.5.0"
@@ -33,6 +35,11 @@ branch = "master"
 
 # [patch.'https://github.com/switch-lan-play/smoltcp.git'.smoltcp]
 # path = '../smoltcp'
+
+
+[patch.crates-io.tokio]
+git = "https://github.com/tokio-rs/tokio"
+branch = "master"
 
 [target.'cfg(windows)'.dependencies]
 libc = "0.2"

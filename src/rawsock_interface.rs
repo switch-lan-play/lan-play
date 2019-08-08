@@ -15,6 +15,7 @@ use smoltcp::{
 use std::collections::BTreeMap;
 use crate::duplex::{ChannelPort, Sender};
 use log::{warn, debug};
+use futures::{Future, Async, Poll};
 
 type Packet = Vec<u8>;
 #[derive(Debug)]
@@ -85,7 +86,7 @@ impl RawsockInterfaceSet {
         )
     }
 
-    pub fn start(&self, sockets: &mut SocketSet<'_, '_, '_>, interfaces: Vec<RawsockInterface>, f: &mut FnMut(&mut SocketSet)) {
+    pub fn start(&self, sockets: &mut SocketSet<'_, '_, '_>, interfaces: Vec<RawsockInterface>, f: &mut dyn FnMut(&mut SocketSet)) {
         let (mut devs, runners): (Vec<_>, Vec<_>) = interfaces
             .into_iter()
             .map(|i| { self.make_iface(i) })
@@ -188,6 +189,15 @@ impl RawsockInterfaceSet {
     }
 }
 
+struct ReadFuture {}
+impl Future for ReadFuture {
+    type Item = Vec<u8>;
+    type Error = String;
+    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+
+    }
+}
+
 impl<'a> RawsockInterface<'a> {
     pub fn name(&self) -> &String {
         &self.desc.name
@@ -197,6 +207,9 @@ impl<'a> RawsockInterface<'a> {
     }
     pub fn data_link(&self) -> rawsock::DataLink {
         self.data_link
+    }
+    pub fn receive(&self) -> ReadFuture {
+        ReadFuture{} 
     }
 }
 
