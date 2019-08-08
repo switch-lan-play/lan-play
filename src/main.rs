@@ -15,19 +15,11 @@ use smoltcp::{
 use rawsock::{traits::Library, Error as RawsockError};
 use std::str;
 
-static mut RAWSOCK_LIB: Result<Box<dyn Library>, RawsockError> = Err(RawsockError::NoPathsProvided);
-
 fn main() {
     env_logger::init().unwrap();
     println!("Opening packet capturing library");
 
-    let lib = match unsafe {
-        RAWSOCK_LIB = rawsock::open_best_library();
-        &RAWSOCK_LIB
-    } {
-        Ok(lib) => lib,
-        Err(err) => panic!(err)
-    };
+    let lib = rawsock::open_best_library().expect("Can't open any library");
     let set = RawsockInterfaceSet::new(lib).expect("Could not open any packet capturing library");
     println!("Library opened, version is {}", set.lib_version());
     let (opened, errored): (Vec<_>, _) = set.open_all_interface();

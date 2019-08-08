@@ -27,7 +27,7 @@ pub enum Error {
 pub struct ErrorWithDesc (pub Error, pub InterfaceDescription);
 
 pub struct RawsockInterfaceSet {
-    lib: &'static Box<dyn Library>,
+    lib: Box<dyn Library>,
     all_interf: Vec<rawsock::InterfaceDescription>,
     ip: smoltcp::wire::IpCidr,
 }
@@ -36,33 +36,33 @@ pub struct RawsockDevice {
     port: ChannelPort<Packet>,
 }
 
-pub struct RawsockRunner {
+pub struct RawsockRunner<'a> {
     port: ChannelPort<Packet>,
-    interface: Arc<InterfaceMT>,
+    interface: Arc<InterfaceMT<'a>>,
 }
 
-pub struct RawsockInterface {
+pub struct RawsockInterface<'a> {
     pub desc: InterfaceDescription,
     mac: EthernetAddress,
     data_link: rawsock::DataLink,
     device: RawsockDevice,
     port: ChannelPort<Packet>,
-    interface: InterfaceMT,
+    interface: InterfaceMT<'a>,
     // dummy: &'a (),
 }
 
-struct InterfaceMT (RefCell<Box<dyn Interface<'static>>>);
-unsafe impl Sync for InterfaceMT {}
-unsafe impl Send for InterfaceMT {}
-impl Deref for InterfaceMT {
-    type Target = RefCell<Box<dyn Interface<'static>>>;
+struct InterfaceMT<'a> (RefCell<Box<dyn Interface<'a> + 'a>>);
+unsafe impl<'a> Sync for InterfaceMT<'a> {}
+unsafe impl<'a> Send for InterfaceMT<'a> {}
+impl<'a> Deref for InterfaceMT<'a> {
+    type Target = RefCell<Box<dyn Interface<'a> + 'a>>;
     fn deref(&self) -> &Self::Target {
         &self.0
     }
 }
 
 impl RawsockInterfaceSet {
-    pub fn new(lib: &'static Box<dyn Library>) -> Result<RawsockInterfaceSet, rawsock::Error> {
+    pub fn new(lib: Box<dyn Library>) -> Result<RawsockInterfaceSet, rawsock::Error> {
         let all_interf = lib.all_interfaces()?;
         Ok(RawsockInterfaceSet {
             lib,
@@ -97,7 +97,7 @@ impl RawsockInterfaceSet {
                 let interf = runner.interface.clone();
                 let unparker = parker.unparker().clone();
                 s.spawn(move |_| {
-                    let r = interf.borrow().loop_infinite(&mut |packet| {
+                    let r = interf.borrow().loop_infinite_dyn(&|packet| {
                         unparker.unpark();
                         match sender.send(packet.as_owned().to_vec()) {
                             Ok(_) => (),
@@ -136,9 +136,9 @@ impl RawsockInterfaceSet {
             }
         }).unwrap();
     }
-    fn make_iface<'a, 'b, 'c>(&self, interf: RawsockInterface) -> (
-            EthernetInterface<'a, 'b, 'c, RawsockDevice>,
-            RawsockRunner
+    fn make_iface<'a, 'b, 'c, 'e>(&self, interf: RawsockInterface<'a>) -> (
+            EthernetInterface<'b, 'c, 'e, RawsockDevice>,
+            RawsockRunner<'a>
     ) {
         let ethernet_addr = interf.mac().clone();
         let device = interf.device;
@@ -157,7 +157,7 @@ impl RawsockInterfaceSet {
             interface
         })
     }
-    fn create_device(&self, desc: InterfaceDescription) -> Result<RawsockInterface, ErrorWithDesc> {
+    fn create_device<'a>(&'a self, desc: InterfaceDescription) -> Result<RawsockInterface<'a>, ErrorWithDesc> {
         let name = &desc.name;
         let interface = match self.lib.open_interface(name) {
             Err(err) => return Err(ErrorWithDesc(Error::RawsockErr(err), desc)),
@@ -188,7 +188,7 @@ impl RawsockInterfaceSet {
     }
 }
 
-impl RawsockInterface {
+impl<'a> RawsockInterface<'a> {
     pub fn name(&self) -> &String {
         &self.desc.name
     }
