@@ -34,12 +34,12 @@ pub struct RawsockInterfaceSet {
 }
 
 pub struct RawsockDevice {
-    port: ChannelPort<Packet>,
+    pub port: ChannelPort<Packet>,
 }
 
 pub struct RawsockRunner<'a> {
-    port: ChannelPort<Packet>,
-    interface: Arc<InterfaceMT<'a>>,
+    pub port: ChannelPort<Packet>,
+    pub interface: Arc<InterfaceMT<'a>>,
 }
 
 pub struct RawsockInterface<'a> {
@@ -49,6 +49,7 @@ pub struct RawsockInterface<'a> {
     device: RawsockDevice,
     port: ChannelPort<Packet>,
     interface: InterfaceMT<'a>,
+    ip: smoltcp::wire::IpCidr,
     // dummy: &'a (),
 }
 
@@ -89,7 +90,7 @@ impl RawsockInterfaceSet {
     pub fn start(&self, sockets: &mut SocketSet<'_, '_, '_>, interfaces: Vec<RawsockInterface>, f: &mut dyn FnMut(&mut SocketSet)) {
         let (mut devs, runners): (Vec<_>, Vec<_>) = interfaces
             .into_iter()
-            .map(|i| { i.split_iface(self.ip.clone()) })
+            .map(|i| { i.split_iface() })
             .unzip();
         thread::scope(move |s| {
             let parker = Parker::new();
@@ -162,6 +163,7 @@ impl RawsockInterfaceSet {
                 },
                 mac,
                 interface,
+                ip: self.ip.clone()
             }),
             Err(err) => Err(ErrorWithDesc(Error::GetAddr(err), desc))
         }
@@ -178,7 +180,13 @@ impl<'a> RawsockInterface<'a> {
     pub fn data_link(&self) -> rawsock::DataLink {
         self.data_link
     }
-    pub fn split_iface<'b, 'c, 'e>(self, ip: smoltcp::wire::IpCidr) -> (
+    pub fn split_device(self) -> (RawsockDevice, RawsockRunner<'a>) {
+        (self.device, RawsockRunner {
+            port: self.port,
+            interface: Arc::new(self.interface)
+        })
+    }
+    pub fn split_iface<'b, 'c, 'e>(self) -> (
             EthernetInterface<'b, 'c, 'e, RawsockDevice>,
             RawsockRunner<'a>
     ) {
@@ -187,7 +195,7 @@ impl<'a> RawsockInterface<'a> {
         let interface = Arc::new(self.interface);
         let neighbor_cache = NeighborCache::new(BTreeMap::new());
         let ip_addrs = [
-            ip,
+            self.ip,
         ];
         let iface = EthernetInterfaceBuilder::new(device)
                 .ethernet_addr(ethernet_addr)

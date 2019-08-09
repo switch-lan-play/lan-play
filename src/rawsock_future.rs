@@ -2,14 +2,16 @@ use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::reactor::PollEvented;
 use mio::event::Evented;
 use mio::{Registration, Poll, Token, PollOpt, Ready};
-use crate::rawsock_interface::{RawsockInterface};
+use crate::rawsock_interface::{RawsockInterface, RawsockRunner, RawsockDevice};
 use std::io;
-
-pub type Shit<'a> = PollEvented<RawsockInterfaceEvented<'a>>;
+use std::thread;
+use log::{warn, debug};
 
 pub struct RawsockInterfaceEvented<'a> {
-    inner: RawsockInterface<'a>,
+    inner: RawsockDevice,
+    runner: RawsockRunner<'a>,
     registration: Registration,
+    join_handle: Option<thread::JoinHandle<()>>,
 }
 
 impl<'a> Into<RawsockInterfaceEvented<'a>> for RawsockInterface<'a> {
@@ -19,11 +21,49 @@ impl<'a> Into<RawsockInterfaceEvented<'a>> for RawsockInterface<'a> {
 }
 
 impl<'a> RawsockInterfaceEvented<'a> {
-    pub fn new(inner: RawsockInterface<'a>) -> RawsockInterfaceEvented<'a> {
-        let (registration, set_readiness) = Registration::new2();
+    pub fn new(interf: RawsockInterface<'a>) -> RawsockInterfaceEvented<'a> {
+        let (dev, runner) = interf.split_device();
+        let (registration, s) = Registration::new2();
+        let raw_runner = hide_lt(&mut runner);
+
+        let sender = runner.port.clone_sender();
+        let interf = runner.interface.clone();
+        let join_handle = Some(thread::spawn(move || {
+            let r = interf.borrow().loop_infinite_dyn(&|packet| {
+                s.set_readiness(Ready::readable()).unwrap();
+                match sender.send(packet.as_owned().to_vec()) {
+                    Ok(_) => (),
+                    Err(err) => warn!("recv error: {:?}", err)
+                }
+            });
+            if !r.is_ok() {
+                warn!("loop_infinite {:?}", r);
+            }
+            debug!("recv thread exit");
+        }));
         RawsockInterfaceEvented {
-            inner,
+            inner: dev,
+            runner,
             registration,
+            join_handle,
+        }
+    }
+}
+
+fn hide_lt<'a>(runner: &mut RawsockRunner<'a>) -> *mut RawsockRunner<'static> {
+    unsafe fn inner<'a>(runner: *mut (RawsockRunner<'a>)) -> *mut (RawsockRunner<'static>) {
+        use std::mem;
+        // false positive: https://github.com/rust-lang/rust-clippy/issues/2906
+        #[allow(clippy::transmute_ptr_to_ptr)]
+        mem::transmute(runner)
+    }
+    unsafe { inner(runner as *mut _) }
+}
+
+impl<'a> Drop for RawsockInterfaceEvented<'a> {
+    fn drop(&mut self) {
+        if let Some(handle) = self.join_handle.take() {
+            handle.join().unwrap();
         }
     }
 }
