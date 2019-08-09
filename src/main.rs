@@ -9,6 +9,7 @@ extern crate hyper;
 extern crate futures;
 
 mod rawsock_interface;
+mod rawsock_future;
 mod get_addr;
 mod duplex;
 

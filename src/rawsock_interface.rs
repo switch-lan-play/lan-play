@@ -89,7 +89,7 @@ impl RawsockInterfaceSet {
     pub fn start(&self, sockets: &mut SocketSet<'_, '_, '_>, interfaces: Vec<RawsockInterface>, f: &mut dyn FnMut(&mut SocketSet)) {
         let (mut devs, runners): (Vec<_>, Vec<_>) = interfaces
             .into_iter()
-            .map(|i| { self.make_iface(i) })
+            .map(|i| { i.split_iface(self.ip.clone()) })
             .unzip();
         thread::scope(move |s| {
             let parker = Parker::new();
@@ -137,27 +137,6 @@ impl RawsockInterfaceSet {
             }
         }).unwrap();
     }
-    fn make_iface<'a, 'b, 'c, 'e>(&self, interf: RawsockInterface<'a>) -> (
-            EthernetInterface<'b, 'c, 'e, RawsockDevice>,
-            RawsockRunner<'a>
-    ) {
-        let ethernet_addr = interf.mac().clone();
-        let device = interf.device;
-        let interface = Arc::new(interf.interface);
-        let neighbor_cache = NeighborCache::new(BTreeMap::new());
-        let ip_addrs = [
-            self.ip,
-        ];
-        let iface = EthernetInterfaceBuilder::new(device)
-                .ethernet_addr(ethernet_addr)
-                .neighbor_cache(neighbor_cache)
-                .ip_addrs(ip_addrs)
-                .finalize();
-        (iface, RawsockRunner {
-            port: interf.port,
-            interface
-        })
-    }
     fn create_device<'a>(&'a self, desc: InterfaceDescription) -> Result<RawsockInterface<'a>, ErrorWithDesc> {
         let name = &desc.name;
         let interface = match self.lib.open_interface(name) {
@@ -189,15 +168,6 @@ impl RawsockInterfaceSet {
     }
 }
 
-struct ReadFuture {}
-impl Future for ReadFuture {
-    type Item = Vec<u8>;
-    type Error = String;
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-
-    }
-}
-
 impl<'a> RawsockInterface<'a> {
     pub fn name(&self) -> &String {
         &self.desc.name
@@ -208,8 +178,26 @@ impl<'a> RawsockInterface<'a> {
     pub fn data_link(&self) -> rawsock::DataLink {
         self.data_link
     }
-    pub fn receive(&self) -> ReadFuture {
-        ReadFuture{} 
+    pub fn split_iface<'b, 'c, 'e>(self, ip: smoltcp::wire::IpCidr) -> (
+            EthernetInterface<'b, 'c, 'e, RawsockDevice>,
+            RawsockRunner<'a>
+    ) {
+        let ethernet_addr = self.mac().clone();
+        let device = self.device;
+        let interface = Arc::new(self.interface);
+        let neighbor_cache = NeighborCache::new(BTreeMap::new());
+        let ip_addrs = [
+            ip,
+        ];
+        let iface = EthernetInterfaceBuilder::new(device)
+                .ethernet_addr(ethernet_addr)
+                .neighbor_cache(neighbor_cache)
+                .ip_addrs(ip_addrs)
+                .finalize();
+        (iface, RawsockRunner {
+            port: self.port,
+            interface
+        })
     }
 }
 
