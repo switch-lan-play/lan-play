@@ -8,7 +8,7 @@ use rawsock::InterfaceDescription;
 use crossbeam_utils::{thread, sync::Parker};
 use smoltcp::{
     iface::{EthernetInterfaceBuilder, NeighborCache, EthernetInterface},
-    wire::{IpAddress, IpCidr, EthernetAddress},
+    wire::{IpCidr, EthernetAddress},
     socket::{SocketSet},
     time::{Instant},
 };
@@ -62,12 +62,12 @@ impl<'a> Deref for InterfaceMT<'a> {
 }
 
 impl RawsockInterfaceSet {
-    pub fn new(lib: Box<dyn Library>) -> Result<RawsockInterfaceSet, rawsock::Error> {
+    pub fn new(lib: Box<dyn Library>, ip: IpCidr) -> Result<RawsockInterfaceSet, rawsock::Error> {
         let all_interf = lib.all_interfaces()?;
         Ok(RawsockInterfaceSet {
             lib,
             all_interf,
-            ip: IpCidr::new(IpAddress::v4(192, 168, 23, 20), 24),
+            ip,
         })
     }
     pub fn lib_version(&self) -> rawsock::LibraryVersion {

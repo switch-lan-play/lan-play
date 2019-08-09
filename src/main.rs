@@ -10,7 +10,8 @@ mod duplex;
 use rawsock_interface::{ErrorWithDesc, RawsockInterfaceSet};
 use smoltcp::{
     socket::{SocketSet, TcpSocket, TcpSocketBuffer},
-    time::{Duration}
+    time::{Duration},
+    wire::{IpCidr, IpAddress}
 };
 use rawsock::{traits::Library, Error as RawsockError};
 use std::str;
@@ -20,7 +21,9 @@ fn main() {
     println!("Opening packet capturing library");
 
     let lib = rawsock::open_best_library().expect("Can't open any library");
-    let set = RawsockInterfaceSet::new(lib).expect("Could not open any packet capturing library");
+    let set = RawsockInterfaceSet::new(lib, IpCidr::new(
+        IpAddress::v4(10, 13, 37, 2)
+    , 16)).expect("Could not open any packet capturing library");
     println!("Library opened, version is {}", set.lib_version());
     let (opened, errored): (Vec<_>, _) = set.open_all_interface();
 
