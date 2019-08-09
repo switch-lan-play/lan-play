@@ -5,6 +5,7 @@ use mio::{Registration, Poll, Token, PollOpt, Ready};
 use crate::rawsock_interface::{RawsockInterface, RawsockRunner, RawsockDevice};
 use std::io;
 use std::thread;
+use std::sync::mpsc::TryRecvError;
 use log::{warn, debug};
 
 pub struct RawsockInterfaceEvented<'a> {
@@ -22,12 +23,12 @@ impl<'a> Into<RawsockInterfaceEvented<'a>> for RawsockInterface<'a> {
 
 impl<'a> RawsockInterfaceEvented<'a> {
     pub fn new(interf: RawsockInterface<'a>) -> RawsockInterfaceEvented<'a> {
-        let (dev, runner) = interf.split_device();
+        let (dev, mut runner) = interf.split_device();
         let (registration, s) = Registration::new2();
         let raw_runner = hide_lt(&mut runner);
 
         let sender = runner.port.clone_sender();
-        let interf = runner.interface.clone();
+        let interf = unsafe { (*raw_runner).interface.clone() };
         let join_handle = Some(thread::spawn(move || {
             let r = interf.borrow().loop_infinite_dyn(&|packet| {
                 s.set_readiness(Ready::readable()).unwrap();
@@ -63,6 +64,7 @@ fn hide_lt<'a>(runner: &mut RawsockRunner<'a>) -> *mut RawsockRunner<'static> {
 impl<'a> Drop for RawsockInterfaceEvented<'a> {
     fn drop(&mut self) {
         if let Some(handle) = self.join_handle.take() {
+            self.runner.interface.borrow().break_loop();
             handle.join().unwrap();
         }
     }
@@ -81,7 +83,15 @@ impl<'a> Evented for RawsockInterfaceEvented<'a> {
         self.registration.reregister(poll, token, interest, opts)
     }
 
-    fn deregister(&self, poll: &Poll) -> std::io::Result<()> {
+    fn deregister(&self, poll: &Poll) -> io::Result<()> {
         self.registration.deregister(poll)
+    }
+}
+
+impl<'a> io::Read for RawsockInterfaceEvented<'a> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        match self.inner.port.try_recv() {
+            Err(err) => Err(io::Error::new(io::ErrorKind, error: E))
+        }
     }
 }

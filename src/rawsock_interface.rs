@@ -53,7 +53,7 @@ pub struct RawsockInterface<'a> {
     // dummy: &'a (),
 }
 
-struct InterfaceMT<'a> (RefCell<Box<dyn Interface<'a> + 'a>>);
+pub struct InterfaceMT<'a> (RefCell<Box<dyn Interface<'a> + 'a>>);
 unsafe impl<'a> Sync for InterfaceMT<'a> {}
 unsafe impl<'a> Send for InterfaceMT<'a> {}
 impl<'a> Deref for InterfaceMT<'a> {
