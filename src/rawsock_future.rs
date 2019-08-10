@@ -13,6 +13,7 @@ pub struct RawsockInterfaceEvented<'a> {
     runner: RawsockRunner<'a>,
     registration: Registration,
     join_handle: Option<thread::JoinHandle<()>>,
+    recv_buf: Option<Vec<u8>>
 }
 
 impl<'a> Into<RawsockInterfaceEvented<'a>> for RawsockInterface<'a> {
@@ -47,6 +48,7 @@ impl<'a> RawsockInterfaceEvented<'a> {
             runner,
             registration,
             join_handle,
+            recv_buf: None,
         }
     }
 }
@@ -90,8 +92,20 @@ impl<'a> Evented for RawsockInterfaceEvented<'a> {
 
 impl<'a> io::Read for RawsockInterfaceEvented<'a> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        match self.inner.port.try_recv() {
-            Err(err) => Err(io::Error::new(io::ErrorKind, error: E))
+        let buffer = if let Some(packet) = self.recv_buf.take() {
+            packet
+        } else {
+            match self.inner.port.try_recv() {
+                Ok(packet) => packet,
+                Err(err) => return Err(io::Error::new(io::ErrorKind::WouldBlock, "would block")),
+            }
+        };
+        let size = std::cmp::min(buffer.len(), buf.len());
+        let (out, rest) = buffer.split_at(size);
+        buf.copy_from_slice(&out);
+        if rest.len() > 0 {
+            self.recv_buf = Some(Vec::from(rest));
         }
+        Ok(size)
     }
 }
