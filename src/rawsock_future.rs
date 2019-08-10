@@ -1,19 +1,70 @@
 use tokio::io::{AsyncRead, AsyncWrite};
-use tokio::reactor::PollEvented;
+use tokio::reactor;
+use tokio::stream::Stream;
 use mio::event::Evented;
-use mio::{Registration, Poll, Token, PollOpt, Ready};
+use mio::{Registration, Token, PollOpt, Ready};
 use crate::rawsock_interface::{RawsockInterface, RawsockRunner, RawsockDevice};
 use std::io;
 use std::thread;
 use std::sync::mpsc::TryRecvError;
+use std::task;
 use log::{warn, debug};
+use std::pin::Pin;
+use futures::future::poll_fn;
+use futures::ready;
+
+pub struct RawsockInterfaceAsync<'a> {
+    io: RawsockInterfaceEvented<'a>,
+    registration: reactor::Registration,
+}
+
+impl<'a> RawsockInterfaceAsync<'a> {
+    pub fn new(interf: RawsockInterface<'a>) -> RawsockInterfaceAsync<'a> {
+        RawsockInterfaceAsync {
+            io: interf.into(),
+            registration: reactor::Registration::new(),
+        }
+    }
+    pub async fn recv(&mut self) -> Option<io::Result<Vec<u8>>> {
+        poll_fn(|cx| self.poll_recv(cx)).await
+    }
+    /// Ensure that the I/O resource is registered with the reactor.
+    fn register(&self) -> io::Result<()> {
+        self.registration
+            .register(&self.io)?;
+        Ok(())
+    }
+    fn poll_recv(&mut self, cx: &mut task::Context<'_>) -> task::Poll<Option<io::Result<Vec<u8>>>> {
+        self.register()?;
+        ready!(self.registration.poll_read_ready(cx));
+        match self.io.inner.port.try_recv() {
+            Ok(packet) => task::Poll::Ready(Some(Ok(packet))),
+            Err(TryRecvError::Disconnected) => task::Poll::Ready(None),
+            Err(TryRecvError::Empty) => task::Poll::Pending,
+        }
+    }
+}
+
+impl<'a> Stream for RawsockInterfaceAsync<'a> {
+    type Item = io::Result<Vec<u8>>;
+
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut task::Context<'_>) -> task::Poll<Option<Self::Item>> {
+        self.register()?;
+        self.poll_recv(cx)
+    }
+}
+
+impl<'a> Into<RawsockInterfaceAsync<'a>> for RawsockInterface<'a> {
+    fn into(self) -> RawsockInterfaceAsync<'a> {
+        RawsockInterfaceAsync::new(self)
+    }
+}
 
 pub struct RawsockInterfaceEvented<'a> {
     inner: RawsockDevice,
     runner: RawsockRunner<'a>,
     registration: Registration,
     join_handle: Option<thread::JoinHandle<()>>,
-    recv_buf: Option<Vec<u8>>
 }
 
 impl<'a> Into<RawsockInterfaceEvented<'a>> for RawsockInterface<'a> {
@@ -48,7 +99,6 @@ impl<'a> RawsockInterfaceEvented<'a> {
             runner,
             registration,
             join_handle,
-            recv_buf: None,
         }
     }
 }
@@ -73,39 +123,19 @@ impl<'a> Drop for RawsockInterfaceEvented<'a> {
 }
 
 impl<'a> Evented for RawsockInterfaceEvented<'a> {
-    fn register(&self, poll: &Poll, token: Token, interest: Ready, opts: PollOpt)
+    fn register(&self, poll: &mio::Poll, token: Token, interest: Ready, opts: PollOpt)
         -> io::Result<()>
     {
         self.registration.register(poll, token, interest, opts)
     }
 
-    fn reregister(&self, poll: &Poll, token: Token, interest: Ready, opts: PollOpt)
+    fn reregister(&self, poll: &mio::Poll, token: Token, interest: Ready, opts: PollOpt)
         -> io::Result<()>
     {
         self.registration.reregister(poll, token, interest, opts)
     }
 
-    fn deregister(&self, poll: &Poll) -> io::Result<()> {
+    fn deregister(&self, poll: &mio::Poll) -> io::Result<()> {
         self.registration.deregister(poll)
-    }
-}
-
-impl<'a> io::Read for RawsockInterfaceEvented<'a> {
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        let buffer = if let Some(packet) = self.recv_buf.take() {
-            packet
-        } else {
-            match self.inner.port.try_recv() {
-                Ok(packet) => packet,
-                Err(err) => return Err(io::Error::new(io::ErrorKind::WouldBlock, "would block")),
-            }
-        };
-        let size = std::cmp::min(buffer.len(), buf.len());
-        let (out, rest) = buffer.split_at(size);
-        buf.copy_from_slice(&out);
-        if rest.len() > 0 {
-            self.recv_buf = Some(Vec::from(rest));
-        }
-        Ok(size)
     }
 }

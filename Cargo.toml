@@ -11,7 +11,7 @@ crossbeam-utils = "0.6"
 env_logger = "0.4"
 log = "0.4"
 hyper = "0.12"
-futures = "0.1"
+futures-preview = "=0.3.0-alpha.17"
 mio = "0.6"
 
 [dependencies.smoltcp]
