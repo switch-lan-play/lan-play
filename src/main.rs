@@ -43,10 +43,10 @@ async fn fuck() {
     let mut test = opened.remove(2);
     let mut test = RawsockInterfaceAsync::new(test);
     loop {
-        let he = test.recv().await;
-        println!("Nice {:?}", &he);
+        let he = test.recv().await.unwrap().unwrap();
+        // println!("Nice {:?}", he.len());
     }
-    
+
     for interface in &opened {
         let name = interface.name();
         println!("Interface {} opened, mac: {}, data link: {}", name, interface.mac(), interface.data_link());

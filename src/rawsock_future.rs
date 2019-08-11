@@ -36,12 +36,16 @@ impl<'a> RawsockInterfaceAsync<'a> {
     }
     fn poll_recv(&mut self, cx: &mut task::Context<'_>) -> task::Poll<Option<io::Result<Vec<u8>>>> {
         self.register()?;
-        ready!(self.registration.poll_read_ready(cx));
-        match self.io.inner.port.try_recv() {
-            Ok(packet) => task::Poll::Ready(Some(Ok(packet))),
-            Err(TryRecvError::Disconnected) => task::Poll::Ready(None),
-            Err(TryRecvError::Empty) => task::Poll::Pending,
+        loop {
+            match self.io.inner.port.try_recv() {
+                Ok(packet) => return task::Poll::Ready(Some(Ok(packet))),
+                Err(TryRecvError::Disconnected) => return task::Poll::Ready(None),
+                Err(TryRecvError::Empty) => {
+                    ready!(self.registration.poll_read_ready(cx));
+                },
+            }
         }
+        return task::Poll::Ready(None);
     }
 }
 
