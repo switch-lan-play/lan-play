@@ -9,13 +9,13 @@ extern crate hyper;
 extern crate futures;
 #[macro_use] extern crate cfg_if;
 
-mod rawsock_interface;
+mod rawsock_socket;
 mod rawsock_future;
 mod get_addr;
 mod duplex;
 
 use rawsock_future::RawsockInterfaceAsync;
-use rawsock_interface::{ErrorWithDesc, RawsockInterfaceSet};
+use rawsock_socket::{ErrorWithDesc, RawsockInterfaceSet};
 use smoltcp::{
     wire::{IpCidr, IpAddress}
 };

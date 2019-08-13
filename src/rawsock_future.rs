@@ -2,7 +2,7 @@ use tokio::reactor;
 use tokio::stream::Stream;
 use mio::event::Evented;
 use mio::{Registration, Token, PollOpt, Ready};
-use crate::rawsock_interface::{RawsockInterface, RawsockRunner, RawsockDevice};
+use crate::rawsock_socket::{RawsockInterface, RawsockRunner, RawsockDevice};
 use std::io;
 use std::thread;
 use std::sync::mpsc::TryRecvError;
@@ -84,7 +84,7 @@ impl<'a> RawsockInterfaceEvented<'a> {
         let sender = runner.port.clone_sender();
         let interf = unsafe { (*raw_runner).interface.clone() };
         let join_handle = Some(thread::spawn(move || {
-            let r = interf.borrow().loop_infinite_dyn(&|packet| {
+            let r = interf.loop_infinite_dyn(&|packet| {
                 s.set_readiness(Ready::readable()).unwrap();
                 match sender.send(packet.as_owned().to_vec()) {
                     Ok(_) => (),
@@ -118,7 +118,7 @@ fn hide_lt<'a>(runner: &mut RawsockRunner<'a>) -> *mut RawsockRunner<'static> {
 impl<'a> Drop for RawsockInterfaceEvented<'a> {
     fn drop(&mut self) {
         if let Some(handle) = self.join_handle.take() {
-            self.runner.interface.borrow().break_loop();
+            self.runner.interface.break_loop();
             handle.join().unwrap();
         }
     }

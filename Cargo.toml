@@ -6,7 +6,7 @@ edition = "2018"
 
 [dependencies]
 tokio = "0.2"
-rawsock = "0.2.1"
+rawsock = "0.3"
 crossbeam-utils = "0.6"
 env_logger = "0.4"
 log = "0.4"
@@ -27,13 +27,6 @@ features = [
     "verbose",
     "socket-accept-all", "arp-fake-subnet"
 ]
-
-[patch.crates-io.rawsock]
-git = "https://github.com/szymonwieloch/rust-rawsock.git"
-branch = "master"
-# git = "https://github.com/spacemeowx2/rust-rawsock.git"
-# branch = "loop_infinite-dynamic"
-# path = '../rust-rawsock'
 
 # [patch.'https://github.com/switch-lan-play/smoltcp.git'.smoltcp]
 # path = '../smoltcp'

@@ -1,9 +1,7 @@
 use std::sync::Arc;
-use std::ops::{Deref};
-use std::cell::RefCell;
 use crate::get_addr::{get_mac, GetAddressError};
 use smoltcp::phy::{DeviceCapabilities,RxToken,TxToken};
-use rawsock::traits::{DynamicInterface as Interface, Library};
+use rawsock::traits::{DynamicInterface, Library};
 use rawsock::InterfaceDescription;
 use crossbeam_utils::{thread, sync::Parker};
 use smoltcp::{
@@ -38,7 +36,7 @@ pub struct RawsockDevice {
 
 pub struct RawsockRunner<'a> {
     pub port: ChannelPort<Packet>,
-    pub interface: Arc<InterfaceMT<'a>>,
+    pub interface: Arc<dyn DynamicInterface<'a> + 'a>,
 }
 
 pub struct RawsockInterface<'a> {
@@ -47,19 +45,9 @@ pub struct RawsockInterface<'a> {
     data_link: rawsock::DataLink,
     device: RawsockDevice,
     port: ChannelPort<Packet>,
-    interface: InterfaceMT<'a>,
+    interface: Arc<dyn DynamicInterface<'a> + 'a>,
     ip: smoltcp::wire::IpCidr,
     // dummy: &'a (),
-}
-
-pub struct InterfaceMT<'a> (RefCell<Box<dyn Interface<'a> + 'a>>);
-unsafe impl<'a> Sync for InterfaceMT<'a> {}
-unsafe impl<'a> Send for InterfaceMT<'a> {}
-impl<'a> Deref for InterfaceMT<'a> {
-    type Target = RefCell<Box<dyn Interface<'a> + 'a>>;
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
 }
 
 impl RawsockInterfaceSet {
@@ -98,7 +86,7 @@ impl RawsockInterfaceSet {
                 let interf = runner.interface.clone();
                 let unparker = parker.unparker().clone();
                 s.spawn(move |_| {
-                    let r = interf.borrow().loop_infinite_dyn(&|packet| {
+                    let r = interf.loop_infinite_dyn(&|packet| {
                         unparker.unpark();
                         match sender.send(packet.as_owned().to_vec()) {
                             Ok(_) => (),
@@ -114,7 +102,7 @@ impl RawsockInterfaceSet {
                     let port = runner.port;
                     let interf = runner.interface.clone();
                     while let Ok(to_send) = port.recv() {
-                        match interf.borrow().send(&to_send) {
+                        match interf.send(&to_send) {
                             Ok(_) => (),
                             Err(err) => warn!("send error: {:?}", err)
                         }
@@ -139,7 +127,7 @@ impl RawsockInterfaceSet {
     }
     fn create_device<'a>(&'a self, desc: InterfaceDescription) -> Result<RawsockInterface<'a>, ErrorWithDesc> {
         let name = &desc.name;
-        let interface = match self.lib.open_interface(name) {
+        let interface = match self.lib.open_interface_arc(name) {
             Err(err) => return Err(ErrorWithDesc(Error::RawsockErr(err), desc)),
             Ok(interface) => interface
         };
@@ -150,7 +138,6 @@ impl RawsockInterfaceSet {
         }
 
         let (port1, port2) = ChannelPort::new();
-        let interface = InterfaceMT(RefCell::new(interface));
 
         match get_mac(name) {
             Ok(mac) => Ok(RawsockInterface {
@@ -182,7 +169,7 @@ impl<'a> RawsockInterface<'a> {
     pub fn split_device(self) -> (RawsockDevice, RawsockRunner<'a>) {
         (self.device, RawsockRunner {
             port: self.port,
-            interface: Arc::new(self.interface)
+            interface: self.interface
         })
     }
     pub fn split_iface<'b, 'c, 'e>(self) -> (
@@ -191,7 +178,7 @@ impl<'a> RawsockInterface<'a> {
     ) {
         let ethernet_addr = self.mac().clone();
         let device = self.device;
-        let interface = Arc::new(self.interface);
+        let interface = self.interface;
         let neighbor_cache = NeighborCache::new(BTreeMap::new());
         let ip_addrs = [
             self.ip,
