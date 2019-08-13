@@ -79,10 +79,10 @@ impl<'a> RawsockInterfaceEvented<'a> {
     pub fn new(interf: RawsockInterface<'a>) -> RawsockInterfaceEvented<'a> {
         let (dev, mut runner) = interf.split_device();
         let (registration, s) = Registration::new2();
-        let raw_runner = hide_lt(&mut runner);
+        let static_runner = hide_lt(&mut runner);
 
         let sender = runner.port.clone_sender();
-        let interf = unsafe { (*raw_runner).interface.clone() };
+        let interf = static_runner.interface.clone();
         let join_handle = Some(thread::spawn(move || {
             let r = interf.loop_infinite_dyn(&|packet| {
                 s.set_readiness(Ready::readable()).unwrap();
@@ -105,14 +105,12 @@ impl<'a> RawsockInterfaceEvented<'a> {
     }
 }
 
-fn hide_lt<'a>(runner: &mut RawsockRunner<'a>) -> *mut RawsockRunner<'static> {
-    unsafe fn inner<'a>(runner: *mut (RawsockRunner<'a>)) -> *mut (RawsockRunner<'static>) {
+fn hide_lt<'a>(runner: &mut RawsockRunner<'a>) -> &'a mut RawsockRunner<'static> {
+    unsafe fn inner<'a>(runner: &mut (RawsockRunner<'a>)) -> &'a mut (RawsockRunner<'static>) {
         use std::mem;
-        // false positive: https://github.com/rust-lang/rust-clippy/issues/2906
-        #[allow(clippy::transmute_ptr_to_ptr)]
         mem::transmute(runner)
     }
-    unsafe { inner(runner as *mut _) }
+    unsafe { inner(runner) }
 }
 
 impl<'a> Drop for RawsockInterfaceEvented<'a> {
