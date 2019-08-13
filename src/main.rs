@@ -7,24 +7,18 @@ extern crate env_logger;
 extern crate tokio;
 extern crate hyper;
 extern crate futures;
+#[macro_use] extern crate cfg_if;
 
 mod rawsock_interface;
 mod rawsock_future;
 mod get_addr;
 mod duplex;
 
-use rawsock_future::*;
+use rawsock_future::RawsockInterfaceAsync;
 use rawsock_interface::{ErrorWithDesc, RawsockInterfaceSet};
 use smoltcp::{
-    socket::{SocketSet, TcpSocket, TcpSocketBuffer},
-    time::{Duration},
     wire::{IpCidr, IpAddress}
 };
-use std::str;
-use tokio::io;
-use tokio::io::{AsyncRead};
-use tokio::net::TcpStream;
-use tokio::prelude::*;
 
 async fn fuck() {
     println!("Opening packet capturing library");
@@ -40,16 +34,16 @@ async fn fuck() {
         println!("Err: Interface {:?} err {:?}", desc.name, err);
     }
 
+    for interface in &opened {
+        let name = interface.name();
+        println!("Interface {} opened, mac: {}, data link: {}", name, interface.mac(), interface.data_link());
+    }
+
     let mut test = opened.remove(2);
     let mut test = RawsockInterfaceAsync::new(test);
     loop {
         let he = test.recv().await.unwrap().unwrap();
         // println!("Nice {:?}", he.len());
-    }
-
-    for interface in &opened {
-        let name = interface.name();
-        println!("Interface {} opened, mac: {}, data link: {}", name, interface.mac(), interface.data_link());
     }
 
     // let mut tcp2_socket = TcpSocket::new(
@@ -106,6 +100,5 @@ async fn fuck() {
 #[tokio::main]
 async fn main() {
     env_logger::init().unwrap();
-    let lib = rawsock::open_best_library().expect("Can't open any library");
     fuck().await
 }

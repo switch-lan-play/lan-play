@@ -15,7 +15,6 @@ use smoltcp::{
 use std::collections::BTreeMap;
 use crate::duplex::{ChannelPort, Sender};
 use log::{warn, debug};
-use futures::{Future, Poll};
 
 type Packet = Vec<u8>;
 #[derive(Debug)]

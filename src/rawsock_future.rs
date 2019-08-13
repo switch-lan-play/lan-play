@@ -1,4 +1,3 @@
-use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::reactor;
 use tokio::stream::Stream;
 use mio::event::Evented;
@@ -41,11 +40,10 @@ impl<'a> RawsockInterfaceAsync<'a> {
                 Ok(packet) => return task::Poll::Ready(Some(Ok(packet))),
                 Err(TryRecvError::Disconnected) => return task::Poll::Ready(None),
                 Err(TryRecvError::Empty) => {
-                    ready!(self.registration.poll_read_ready(cx));
+                    ready!(self.registration.poll_read_ready(cx)).unwrap();
                 },
             }
         }
-        return task::Poll::Ready(None);
     }
 }
 

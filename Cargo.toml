@@ -13,6 +13,7 @@ log = "0.4"
 hyper = "0.12"
 futures-preview = "=0.3.0-alpha.17"
 mio = "0.6"
+cfg-if = "0.1"
 
 [dependencies.smoltcp]
 # version = "0.5.0"
@@ -45,8 +46,8 @@ branch = "master"
 [target.'cfg(windows)'.dependencies]
 libc = "0.2"
 
-[target.'cfg(any(target_os = "linux", target_os = "macos"))'.dependencies]
-nix = "0.14"
+[target.'cfg(unix)'.dependencies]
+nix = "0.15"
 
 [profile.release]
 opt-level = "z"
