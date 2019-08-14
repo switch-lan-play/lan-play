@@ -73,58 +73,6 @@ impl RawsockInterfaceSet {
             errored.into_iter().map(|i| i.err().unwrap()).collect::<Vec<_>>()
         )
     }
-
-    pub fn start(&self, sockets: &mut SocketSet<'_, '_, '_>, interfaces: Vec<RawsockInterface>, f: &mut dyn FnMut(&mut SocketSet)) {
-        let (mut devs, runners): (Vec<_>, Vec<_>) = interfaces
-            .into_iter()
-            .map(|i| { i.split_iface() })
-            .unzip();
-        thread::scope(move |s| {
-            let parker = Parker::new();
-            for runner in runners {
-                let sender = runner.port.clone_sender();
-                let interf = runner.interface.clone();
-                let unparker = parker.unparker().clone();
-                s.spawn(move |_| {
-                    let r = interf.loop_infinite_dyn(&|packet| {
-                        unparker.unpark();
-                        match sender.send(packet.as_owned().to_vec()) {
-                            Ok(_) => (),
-                            Err(err) => warn!("recv error: {:?}", err)
-                        }
-                    });
-                    if !r.is_ok() {
-                        warn!("loop_infinite {:?}", r);
-                    }
-                    debug!("recv thread exit");
-                });
-                s.spawn(move |_| {
-                    let port = runner.port;
-                    let interf = runner.interface.clone();
-                    while let Ok(to_send) = port.recv() {
-                        match interf.send(&to_send) {
-                            Ok(_) => (),
-                            Err(err) => warn!("send error: {:?}", err)
-                        }
-                    }
-                    debug!("send thread exit");
-                });
-            }
-            loop {
-                f(sockets);
-                parker.park();
-                for dev in &mut devs {
-                    match dev.poll(sockets, Instant::now()) {
-                        Err(smoltcp::Error::Unrecognized) => continue,
-                        Err(err) => {
-                            println!("poll err {}", err);
-                        },
-                        Ok(_) => ()
-                    }
-                }
-            }
-        }).unwrap();
-    }
     fn create_device<'a>(&'a self, desc: InterfaceDescription) -> Result<RawsockInterface<'a>, ErrorWithDesc> {
         let name = &desc.name;
         let interface = match self.lib.open_interface_arc(name) {
