@@ -136,6 +136,6 @@ impl<'a> Evented for RawsockInterfaceEvented<'a> {
     }
 
     fn deregister(&self, poll: &mio::Poll) -> io::Result<()> {
-        self.registration.deregister(poll)
+        poll.deregister(&self.registration)
     }
 }
