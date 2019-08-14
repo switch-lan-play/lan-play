@@ -16,9 +16,9 @@ async fn fuck() {
     println!("Opening packet capturing library");
 
     let lib = rawsock::open_best_library().expect("Can't open any library");
-    let set = RawsockInterfaceSet::new(lib, IpCidr::new(
-        IpAddress::v4(10, 13, 37, 2)
-    , 16)).expect("Could not open any packet capturing library");
+    let set = RawsockInterfaceSet::new(lib,
+        IpCidr::new(IpAddress::v4(10, 13, 37, 2), 16)
+    ).expect("Could not open any packet capturing library");
     println!("Library opened, version is {}", set.lib_version());
     let (mut opened, errored): (Vec<_>, _) = set.open_all_interface();
 
@@ -31,10 +31,10 @@ async fn fuck() {
         println!("Interface {} opened, mac: {}, data link: {}", name, interface.mac(), interface.data_link());
     }
 
-    let mut test = opened.remove(2);
+    let test = opened.remove(2);
     let mut test = RawsockInterfaceAsync::new(test);
     loop {
-        let he = test.recv().await.unwrap().unwrap();
+        let _he = test.recv().await.unwrap().unwrap();
         // println!("Nice {:?}", he.len());
     }
 
