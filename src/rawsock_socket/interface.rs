@@ -171,15 +171,11 @@ impl<'d> smoltcp::phy::Device<'d> for RawsockDevice {
     type TxToken = RawTxToken;
 
     fn receive(&'d mut self) -> Option<(Self::RxToken, Self::TxToken)> {
-        match self.port.try_recv() {
-            Ok(packet) => Some((
-                RawRxToken(packet),
-                RawTxToken(self.port.clone_sender())
-            )),
-            Err(_) => None
-        }
+        self.port.try_recv().ok().map(|packet| {(
+            RawRxToken(packet),
+            RawTxToken(self.port.clone_sender())
+        )})
     }
-
     fn transmit(&'d mut self) -> Option<Self::TxToken> {
         Some(RawTxToken(self.port.clone_sender()))
     }
