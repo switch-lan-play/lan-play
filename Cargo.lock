@@ -260,7 +260,7 @@ dependencies = [
  "log 0.4.8 (registry+https://github.com/rust-lang/crates.io-index)",
  "mio 0.6.19 (registry+https://github.com/rust-lang/crates.io-index)",
  "nix 0.15.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "rawsock 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "rawsock 0.3.0 (git+https://github.com/spacemeowx2/rust-rawsock.git?branch=feature-filter)",
  "smoltcp 0.5.0 (git+https://github.com/switch-lan-play/smoltcp.git?branch=accept-all-v0.5.0)",
  "tokio 0.2.0-alpha.1 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
@@ -438,12 +438,13 @@ dependencies = [
 [[package]]
 name = "rawsock"
 version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
+source = "git+https://github.com/spacemeowx2/rust-rawsock.git?branch=feature-filter#b123dd8d38adfb60012dd94df59e1cc75a16dcad"
 dependencies = [
  "bitflags 1.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "dlopen 0.1.7 (registry+https://github.com/rust-lang/crates.io-index)",
  "dlopen_derive 0.1.4 (registry+https://github.com/rust-lang/crates.io-index)",
  "errno 0.2.4 (registry+https://github.com/rust-lang/crates.io-index)",
+ "lazy_static 1.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "libc 0.2.60 (registry+https://github.com/rust-lang/crates.io-index)",
  "time 0.1.42 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
@@ -815,7 +816,7 @@ dependencies = [
 "checksum pin-utils 0.1.0-alpha.4 (registry+https://github.com/rust-lang/crates.io-index)" = "5894c618ce612a3fa23881b152b608bafb8c56cfc22f434a3ba3120b40f7b587"
 "checksum proc-macro2 0.4.30 (registry+https://github.com/rust-lang/crates.io-index)" = "cf3d2011ab5c909338f7887f4fc896d35932e29146c12c8d01da6b22a80ba759"
 "checksum quote 0.6.13 (registry+https://github.com/rust-lang/crates.io-index)" = "6ce23b6b870e8f94f81fb0a363d65d86675884b34a09043c81e5562f11c1f8e1"
-"checksum rawsock 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)" = "bb3edb83948587d85e23284103bfa797da3f16f686d89dad4c42366ef65a9266"
+"checksum rawsock 0.3.0 (git+https://github.com/spacemeowx2/rust-rawsock.git?branch=feature-filter)" = "<none>"
 "checksum redox_syscall 0.1.56 (registry+https://github.com/rust-lang/crates.io-index)" = "2439c63f3f6139d1b57529d16bc3b8bb855230c8efcc5d3a896c8bea7c3b1e84"
 "checksum rustc_version 0.2.3 (registry+https://github.com/rust-lang/crates.io-index)" = "138e3e0acb6c9fb258b19b67cb8abd63c00679d2851805ea151465464fe9030a"
 "checksum scopeguard 1.0.0 (registry+https://github.com/rust-lang/crates.io-index)" = "b42e15e59b18a828bbf5c58ea01debb36b9b096346de35d941dcb89009f24a0d"

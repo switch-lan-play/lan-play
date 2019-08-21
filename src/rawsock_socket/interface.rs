@@ -1,5 +1,5 @@
 use std::sync::Arc;
-use crate::get_addr::{get_mac, GetAddressError};
+use crate::get_addr::{get_mac};
 use smoltcp::phy::{DeviceCapabilities,RxToken,TxToken};
 use rawsock::traits::{DynamicInterface, Library};
 use rawsock::InterfaceDescription;
@@ -13,16 +13,9 @@ use smoltcp::{
 use std::collections::BTreeMap;
 use crate::duplex::{ChannelPort, Sender};
 use log::{warn, debug};
+use super::{Error, ErrorWithDesc};
 
 type Packet = Vec<u8>;
-#[derive(Debug)]
-pub enum Error {
-    RawsockErr(rawsock::Error),
-    WrongDataLink(rawsock::DataLink),
-    GetAddr(GetAddressError),
-}
-#[derive(Debug)]
-pub struct ErrorWithDesc (pub Error, pub InterfaceDescription);
 
 pub struct RawsockInterfaceSet {
     lib: Box<dyn Library>,
@@ -74,33 +67,32 @@ impl RawsockInterfaceSet {
         )
     }
     fn create_device<'a>(&'a self, desc: InterfaceDescription) -> Result<RawsockInterface<'a>, ErrorWithDesc> {
+        self.create_device_inner(&desc).map_err(|err| { ErrorWithDesc(err, desc) })
+    }
+    fn create_device_inner<'a>(&'a self, desc: &InterfaceDescription) -> Result<RawsockInterface<'a>, Error> {
         let name = &desc.name;
-        let interface = match self.lib.open_interface_arc(name) {
-            Err(err) => return Err(ErrorWithDesc(Error::RawsockErr(err), desc)),
-            Ok(interface) => interface
-        };
+        let mut interface = self.lib.open_interface_arc(name)?;
+        Arc::get_mut(&mut interface).ok_or(Error::Other("Bad Arc"))?.set_filter("icmp")?;
 
         let data_link = interface.data_link();
         if let rawsock::DataLink::Ethernet = data_link {} else {
-            return Err(ErrorWithDesc(Error::WrongDataLink(data_link), desc));
+            return Err(Error::WrongDataLink(data_link));
         }
 
         let (port1, port2) = ChannelPort::new();
 
-        match get_mac(name) {
-            Ok(mac) => Ok(RawsockInterface {
-                data_link,
-                desc,
-                port: port1,
-                device: RawsockDevice {
-                    port: port2
-                },
-                mac,
-                interface,
-                ip: self.ip.clone()
-            }),
-            Err(err) => Err(ErrorWithDesc(Error::GetAddr(err), desc))
-        }
+        let mac = get_mac(name)?;
+        Ok(RawsockInterface {
+            data_link,
+            desc: desc.clone(),
+            port: port1,
+            device: RawsockDevice {
+                port: port2
+            },
+            mac,
+            interface,
+            ip: self.ip.clone()
+        })
     }
 }
 

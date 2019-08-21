@@ -1,5 +1,5 @@
 use std::sync::mpsc;
-use std::sync::mpsc::{Receiver, channel, SendError, RecvError, TryRecvError};
+use std::sync::mpsc::{Receiver, channel, TryRecvError};
 
 pub type Sender<T> = mpsc::Sender<T>;
 pub struct ChannelPort<T> {
@@ -21,12 +21,6 @@ impl<T> ChannelPort<T> {
                 receiver: recv1,
             }
         )
-    }
-    pub fn send(&self, t: T) -> Result<(), SendError<T>> {
-        self.sender.send(t)
-    }
-    pub fn recv(&self) -> Result<T, RecvError> {
-        self.receiver.recv()
     }
     pub fn try_recv(&self) -> Result<T, TryRecvError> {
         self.receiver.try_recv()
