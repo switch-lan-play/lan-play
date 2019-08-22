@@ -1,4 +1,3 @@
-#![feature(async_await)]
 #[macro_use] extern crate cfg_if;
 
 mod rawsock_socket;
