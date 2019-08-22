@@ -1,0 +1,20 @@
+name: Rust
+
+on: [push]
+
+jobs:
+  build:
+    name: Build on rust ${{ matrix.rust_channel }}
+
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        rust_channel: [nightly]
+        os: [ubuntu-latest, windows-latest, macOS-latest]
+
+    steps:
+    - uses: actions/checkout@v1
+    - name: Build
+      run: cargo +${{ matrix.rust_channel }} build --verbose
+    - name: Run tests
+      run: cargo +${{ matrix.rust_channel }} test --verbose
