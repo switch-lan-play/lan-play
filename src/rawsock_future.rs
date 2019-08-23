@@ -1,4 +1,4 @@
-use tokio::reactor;
+use tokio_net::driver;
 use tokio::stream::Stream;
 use mio::event::Evented;
 use mio::{Registration, Token, PollOpt, Ready};
@@ -14,14 +14,14 @@ use futures::ready;
 
 pub struct RawsockInterfaceAsync<'a> {
     io: RawsockInterfaceEvented<'a>,
-    registration: reactor::Registration,
+    registration: driver::Registration,
 }
 
 impl<'a> RawsockInterfaceAsync<'a> {
     pub fn new(interf: RawsockInterface<'a>) -> RawsockInterfaceAsync<'a> {
         RawsockInterfaceAsync {
             io: interf.into(),
-            registration: reactor::Registration::new(),
+            registration: driver::Registration::new(),
         }
     }
     pub async fn recv(&mut self) -> Option<io::Result<Vec<u8>>> {

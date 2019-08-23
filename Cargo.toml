@@ -5,13 +5,14 @@ authors = ["spacemeowx2 <spacemeowx2@gmail.com>"]
 edition = "2018"
 
 [dependencies]
-tokio = "=0.2.0-alpha.1"
+tokio = "=0.2.0-alpha.2"
+tokio-net = "=0.2.0-alpha.2"
 rawsock = "0.3"
 crossbeam-utils = "0.6"
 env_logger = { version = "0.4", default-features = false, features = [] }
 log = "0.4"
 # hyper = "0.12"
-futures-preview = "=0.3.0-alpha.17"
+futures-preview = "=0.3.0-alpha.18"
 mio = "0.6"
 cfg-if = "0.1"
 
