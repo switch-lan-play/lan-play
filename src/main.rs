@@ -4,9 +4,9 @@ mod rawsock_socket;
 mod get_addr;
 mod duplex;
 
-use rawsock_socket::RawsockInterfaceAsync;
 use rawsock_socket::{ErrorWithDesc, RawsockInterfaceSet};
 use smoltcp::{
+    socket::{TcpSocket, TcpSocketBuffer, SocketSet},
     wire::{IpCidr, IpAddress}
 };
 
@@ -29,21 +29,14 @@ async fn fuck() {
         println!("Interface {} opened, mac: {}, data link: {}", name, interface.mac(), interface.data_link());
     }
 
-    let test = opened.remove(2);
-    let mut test = RawsockInterfaceAsync::new(test);
-    loop {
-        let _he = test.recv().await.unwrap().unwrap();
-        // println!("Nice {:?}", he.len());
-    }
+    let mut tcp2_socket = TcpSocket::new(
+        TcpSocketBuffer::new(vec![0; 64]),
+        TcpSocketBuffer::new(vec![0; 128])
+    );
+    tcp2_socket.set_accept_all(true);
 
-    // let mut tcp2_socket = TcpSocket::new(
-    //     TcpSocketBuffer::new(vec![0; 64]),
-    //     TcpSocketBuffer::new(vec![0; 128])
-    // );
-    // tcp2_socket.set_accept_all(true);
-
-    // let mut sockets = SocketSet::new(vec![]);
-    // let tcp2_handle = sockets.add(tcp2_socket);
+    let mut sockets = SocketSet::new(vec![]);
+    let tcp2_handle = sockets.add(tcp2_socket);
     // let mut tcp2_active = false;
     // set.start(&mut sockets, opened, &mut move |sockets| {
     //     {

@@ -2,7 +2,7 @@ use tokio_net::driver;
 use tokio::stream::Stream;
 use mio::event::Evented;
 use mio::{Registration, Token, PollOpt, Ready};
-use crate::rawsock_socket::{RawsockInterface, RawsockRunner, RawsockDevice};
+use crate::rawsock_socket::{RawsockInterface, RawsockDevice};
 use std::io;
 use std::thread;
 use std::sync::mpsc::TryRecvError;
@@ -103,14 +103,6 @@ impl<'a> RawsockInterfaceEvented<'a> {
             join_handle,
         }
     }
-}
-
-fn hide_lt<'a>(runner: &mut RawsockRunner<'a>) -> &'a mut RawsockRunner<'static> {
-    unsafe fn inner<'a>(runner: &mut (RawsockRunner<'a>)) -> &'a mut (RawsockRunner<'static>) {
-        use std::mem;
-        mem::transmute(runner)
-    }
-    unsafe { inner(runner) }
 }
 
 impl<'a> Drop for RawsockInterfaceEvented<'a> {

@@ -1,7 +1,6 @@
 mod interface;
 mod error;
-mod future;
+mod socket;
 
-pub use interface::{RawsockInterfaceSet, RawsockInterface, RawsockRunner, RawsockDevice};
+pub use interface::{RawsockInterfaceSet, RawsockInterface, RawsockDevice};
 pub use error::{Error, ErrorWithDesc};
-pub use future::RawsockInterfaceAsync;

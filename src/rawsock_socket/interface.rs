@@ -11,6 +11,7 @@ use smoltcp::{
     time::{Instant},
 };
 use std::collections::BTreeMap;
+use std::thread::{JoinHandle, spawn};
 use crate::duplex::{ChannelPort, Sender};
 use log::{warn, debug};
 use super::{Error, ErrorWithDesc};
@@ -27,18 +28,16 @@ pub struct RawsockDevice {
     pub port: ChannelPort<Packet>,
 }
 
-pub struct RawsockRunner<'a> {
-    pub port: ChannelPort<Packet>,
-    pub interface: Arc<dyn DynamicInterface<'a> + 'a>,
-}
-
 pub struct RawsockInterface<'a> {
     pub desc: InterfaceDescription,
     mac: EthernetAddress,
     data_link: rawsock::DataLink,
-    device: RawsockDevice,
+
+    iface: EthernetInterface<'a, 'a, 'a, RawsockDevice>,
+
     port: ChannelPort<Packet>,
     interface: Arc<dyn DynamicInterface<'a> + 'a>,
+    join_handle: Option<JoinHandle<()>>,
     ip: smoltcp::wire::IpCidr,
     // dummy: &'a (),
 }
@@ -80,17 +79,30 @@ impl RawsockInterfaceSet {
         }
 
         let (port1, port2) = ChannelPort::new();
-
+        let device = RawsockDevice {
+            port: port2
+        };
         let mac = get_mac(name)?;
+        
+        let ethernet_addr = mac.clone();
+        let neighbor_cache = NeighborCache::new(BTreeMap::new());
+        let ip_addrs = [
+            self.ip,
+        ];
+        let iface = EthernetInterfaceBuilder::new(device)
+                .ethernet_addr(ethernet_addr)
+                .neighbor_cache(neighbor_cache)
+                .ip_addrs(ip_addrs)
+                .finalize();
+
         Ok(RawsockInterface {
             data_link,
             desc: desc.clone(),
             port: port1,
-            device: RawsockDevice {
-                port: port2
-            },
+            iface,
             mac,
             interface,
+            join_handle: None,
             ip: self.ip.clone()
         })
     }
@@ -106,33 +118,58 @@ impl<'a> RawsockInterface<'a> {
     pub fn data_link(&self) -> rawsock::DataLink {
         self.data_link
     }
-    pub fn split_device(self) -> (RawsockDevice, RawsockRunner<'a>) {
-        (self.device, RawsockRunner {
-            port: self.port,
-            interface: self.interface
-        })
+    pub fn iface(&mut self) -> &mut EthernetInterface<'a, 'a, 'a, RawsockDevice> {
+        &mut self.iface
     }
-    pub fn split_iface<'b, 'c, 'e>(self) -> (
-            EthernetInterface<'b, 'c, 'e, RawsockDevice>,
-            RawsockRunner<'a>
-    ) {
-        let ethernet_addr = self.mac().clone();
-        let device = self.device;
-        let interface = self.interface;
-        let neighbor_cache = NeighborCache::new(BTreeMap::new());
-        let ip_addrs = [
-            self.ip,
-        ];
-        let iface = EthernetInterfaceBuilder::new(device)
-                .ethernet_addr(ethernet_addr)
-                .neighbor_cache(neighbor_cache)
-                .ip_addrs(ip_addrs)
-                .finalize();
-        (iface, RawsockRunner {
-            port: self.port,
-            interface
-        })
+    // pub fn take_device(&mut self) -> Option<RawsockDevice> {
+    //     self.run();
+    //     self.device.take()
+    // }
+    // pub fn take_iface<'b, 'c, 'e>(&mut self) -> Option<EthernetInterface<'b, 'c, 'e, RawsockDevice>>
+    // {
+    //     let ethernet_addr = self.mac().clone();
+    //     let device = match self.take_device() {
+    //         Some(d) => d,
+    //         None => return None
+    //     };
+    //     let neighbor_cache = NeighborCache::new(BTreeMap::new());
+    //     let ip_addrs = [
+    //         self.ip,
+    //     ];
+    //     let iface = EthernetInterfaceBuilder::new(device)
+    //             .ethernet_addr(ethernet_addr)
+    //             .neighbor_cache(neighbor_cache)
+    //             .ip_addrs(ip_addrs)
+    //             .finalize();
+    //     Some(iface)
+    // }
+    fn run(&mut self) {
+        if let Some(_) = self.join_handle {
+            return
+        }
+        let static_self = unsafe{hide_lt(self)};
+        let sender = self.port.clone_sender();
+        let interf = static_self.interface.clone();
+        let join_handle = Some(spawn(move || {
+            let r = interf.loop_infinite_dyn(&|packet| {
+                // s.set_readiness(Ready::readable()).unwrap();
+                match sender.send(packet.as_owned().to_vec()) {
+                    Ok(_) => (),
+                    Err(err) => warn!("recv error: {:?}", err)
+                }
+            });
+            if !r.is_ok() {
+                warn!("loop_infinite {:?}", r);
+            }
+            debug!("recv thread exit");
+        }));
+        self.join_handle = join_handle;
     }
+}
+
+unsafe fn hide_lt<'a>(v: &mut (RawsockInterface<'a>)) -> &'a mut (RawsockInterface<'static>) {
+    use std::mem;
+    mem::transmute(v)
 }
 
 pub struct RawRxToken(Packet);
