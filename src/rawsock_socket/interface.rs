@@ -39,7 +39,6 @@ pub struct RawsockInterface<'a> {
     interface: Arc<dyn DynamicInterface<'a> + 'a>,
     join_handle: Option<JoinHandle<()>>,
     ip: smoltcp::wire::IpCidr,
-    // dummy: &'a (),
 }
 
 impl RawsockInterfaceSet {
