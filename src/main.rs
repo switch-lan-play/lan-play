@@ -2,7 +2,7 @@
 
 mod rawsock_socket;
 mod get_addr;
-mod duplex;
+mod channel_port;
 
 use rawsock_socket::{ErrorWithDesc, RawsockInterfaceSet};
 use smoltcp::{

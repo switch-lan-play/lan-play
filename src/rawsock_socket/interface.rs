@@ -12,7 +12,7 @@ use smoltcp::{
 };
 use std::collections::BTreeMap;
 use std::thread::{JoinHandle, spawn};
-use crate::duplex::{ChannelPort, Sender};
+use crate::channel_port::{ChannelPort, Sender};
 use log::{warn, debug};
 use super::{Error, ErrorWithDesc};
 
