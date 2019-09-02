@@ -16,6 +16,11 @@ use crate::channel_port::{ChannelPort, Sender};
 use log::{warn, debug};
 use super::{Error, ErrorWithDesc};
 
+use smoltcp::{
+    socket::{TcpSocket, TcpSocketBuffer},
+    wire::{IpAddress}
+};
+
 type Packet = Vec<u8>;
 
 pub struct RawsockInterfaceSet {
@@ -33,11 +38,11 @@ pub struct RawsockInterface<'a> {
     mac: EthernetAddress,
     data_link: rawsock::DataLink,
 
-    iface: EthernetInterface<'a, 'a, 'a, RawsockDevice>,
+    iface: Option<EthernetInterface<'a, 'a, 'a, RawsockDevice>>,
 
     port: ChannelPort<Packet>,
     interface: Arc<dyn DynamicInterface<'a> + 'a>,
-    join_handle: Option<JoinHandle<()>>,
+    recv_thread: Option<JoinHandle<()>>,
     ip: smoltcp::wire::IpCidr,
 }
 
@@ -88,11 +93,11 @@ impl RawsockInterfaceSet {
         let ip_addrs = [
             self.ip,
         ];
-        let iface = EthernetInterfaceBuilder::new(device)
+        let iface = Some(EthernetInterfaceBuilder::new(device)
                 .ethernet_addr(ethernet_addr)
                 .neighbor_cache(neighbor_cache)
                 .ip_addrs(ip_addrs)
-                .finalize();
+                .finalize());
 
         Ok(RawsockInterface {
             data_link,
@@ -101,10 +106,19 @@ impl RawsockInterfaceSet {
             iface,
             mac,
             interface,
-            join_handle: None,
+            recv_thread: None,
             ip: self.ip.clone()
         })
     }
+}
+
+fn new_listening_socket<'a>() -> TcpSocket<'a> {
+    let mut listening_socket = TcpSocket::new(
+        TcpSocketBuffer::new(vec![0; 2048]),
+        TcpSocketBuffer::new(vec![0; 2048])
+    );
+    listening_socket.set_accept_all(true);
+    listening_socket
 }
 
 impl<'a> RawsockInterface<'a> {
@@ -116,9 +130,6 @@ impl<'a> RawsockInterface<'a> {
     }
     pub fn data_link(&self) -> rawsock::DataLink {
         self.data_link
-    }
-    pub fn iface(&mut self) -> &mut EthernetInterface<'a, 'a, 'a, RawsockDevice> {
-        &mut self.iface
     }
     // pub fn take_device(&mut self) -> Option<RawsockDevice> {
     //     self.run();
@@ -143,13 +154,17 @@ impl<'a> RawsockInterface<'a> {
     //     Some(iface)
     // }
     fn run(&mut self) {
-        if let Some(_) = self.join_handle {
+        if let Some(_) = self.recv_thread {
             return
         }
         let static_self = unsafe{hide_lt(self)};
         let sender = self.port.clone_sender();
         let interf = static_self.interface.clone();
-        let join_handle = Some(spawn(move || {
+        let mut iface = match static_self.iface.take() {
+            Some(iface) => iface,
+            None => return
+        };
+        let recv_thread = Some(spawn(move || {
             let r = interf.loop_infinite_dyn(&|packet| {
                 // s.set_readiness(Ready::readable()).unwrap();
                 match sender.send(packet.as_owned().to_vec()) {
@@ -162,7 +177,21 @@ impl<'a> RawsockInterface<'a> {
             }
             debug!("recv thread exit");
         }));
-        self.join_handle = join_handle;
+        let pool_thread = Some(spawn(move || {
+            let mut sockets = SocketSet::new(vec![]);
+            let mut listening_socket = new_listening_socket();
+            let listening_socket_handle = sockets.add(listening_socket);
+            loop {
+                let timestamp = Instant::now();
+                match iface.poll(&mut sockets, timestamp) {
+                    Ok(_) => {},
+                    Err(e) => {
+                        debug!("poll error: {}", e);
+                    }
+                }
+            }
+        }));
+        self.recv_thread = recv_thread;
     }
 }
 
