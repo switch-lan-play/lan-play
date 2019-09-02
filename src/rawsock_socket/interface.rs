@@ -162,6 +162,24 @@ impl<'a> RawsockInterface<'a> {
             }
             debug!("recv thread exit");
         }));
+        let iface = self.iface();
+        let join_handle2 = Some(spawn(move || {
+            let mut sockets = SocketSet::new(vec![]);
+            loop {
+                let timestamp = Instant::now();
+                iface.poll(&mut sockets, timestamp);
+                match iface.poll_at(&sockets, timestamp) {
+                    Some(poll_at) if timestamp < poll_at => {
+                        phy_wait(fd, Some(poll_at - timestamp)).expect("wait error");
+                    },
+                    Some(_) => (),
+                    None => {
+                        phy_wait(fd, default_timeout).expect("wait error");
+                    }
+                }
+            }
+            debug!("poll thread exit");
+        }));
         self.join_handle = join_handle;
     }
 }
