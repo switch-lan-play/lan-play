@@ -14,9 +14,9 @@ jobs:
 
     steps:
     - uses: actions/checkout@v1
-    - uses: icepuma/rust-action@master
-    - name: Install nightly rust
-      run: rustup toolchain install nightly
+    - uses: hecrj/setup-rust-action@master
+      with:
+        rust-version: ${{ matrix.rust_channel }}
     - name: Build
       run: cargo +${{ matrix.rust_channel }} build --verbose
     - name: Run tests
