@@ -7,7 +7,7 @@ mod channel_port;
 use rawsock_socket::{ErrorWithDesc, RawsockInterfaceSet, TcpListener};
 use smoltcp::{
     socket::{TcpSocket, TcpSocketBuffer, SocketSet},
-    wire::{IpCidr, IpAddress}
+    wire::{Ipv4Cidr, Ipv4Address}
 };
 
 async fn fuck() {
@@ -15,7 +15,7 @@ async fn fuck() {
 
     let lib = rawsock::open_best_library().expect("Can't open any library");
     let set = RawsockInterfaceSet::new(lib,
-        IpCidr::new(IpAddress::v4(10, 13, 37, 2), 16)
+        Ipv4Cidr::new(Ipv4Address::new(10, 13, 37, 2), 16)
     ).expect("Could not open any packet capturing library");
     println!("Library opened, version is {}", set.lib_version());
     let (mut opened, errored): (Vec<_>, _) = set.open_all_interface();

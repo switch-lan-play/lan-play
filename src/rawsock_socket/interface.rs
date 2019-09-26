@@ -4,7 +4,7 @@ use rawsock::traits::{DynamicInterface, Library};
 use rawsock::InterfaceDescription;
 use smoltcp::{
     iface::{EthernetInterfaceBuilder, NeighborCache, EthernetInterface},
-    wire::{IpCidr, EthernetAddress},
+    wire::{IpCidr, EthernetAddress, Ipv4Cidr},
     socket::{SocketSet},
     time::{Instant},
 };
@@ -23,7 +23,7 @@ use smoltcp::{
 pub struct RawsockInterfaceSet {
     lib: Box<dyn Library>,
     all_interf: Vec<rawsock::InterfaceDescription>,
-    ip: smoltcp::wire::IpCidr,
+    ip: Ipv4Cidr,
     filter: CString,
 }
 
@@ -36,9 +36,10 @@ pub struct RawsockInterface<'a> {
 }
 
 impl RawsockInterfaceSet {
-    pub fn new(lib: Box<dyn Library>, ip: IpCidr) -> Result<RawsockInterfaceSet, rawsock::Error> {
+    pub fn new(lib: Box<dyn Library>, ip: Ipv4Cidr) -> Result<RawsockInterfaceSet, rawsock::Error> {
         let all_interf = lib.all_interfaces()?;
-        let filter = format!("net {}/{}", ip.address(), ip.prefix_len());
+        let filter = format!("net {}", ip.network());
+        debug!("filter: {}", filter);
         Ok(RawsockInterfaceSet {
             lib,
             all_interf,
