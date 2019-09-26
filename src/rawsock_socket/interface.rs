@@ -1,9 +1,7 @@
 use std::sync::Arc;
-use crate::get_addr::{get_mac};
-use smoltcp::phy::{DeviceCapabilities,RxToken,TxToken};
+use crate::get_addr::get_mac;
 use rawsock::traits::{DynamicInterface, Library};
 use rawsock::InterfaceDescription;
-use crossbeam_utils::{thread, sync::Parker};
 use smoltcp::{
     iface::{EthernetInterfaceBuilder, NeighborCache, EthernetInterface},
     wire::{IpCidr, EthernetAddress},
@@ -12,20 +10,21 @@ use smoltcp::{
 };
 use std::collections::BTreeMap;
 use std::thread::{JoinHandle, spawn};
-use crate::channel_port::{ChannelPort, Sender};
+use crate::channel_port::ChannelPort;
 use log::{warn, debug};
 use super::{Error, ErrorWithDesc};
 use super::device::{RawsockDevice, Packet};
+use std::ffi::{CStr, CString};
 
 use smoltcp::{
     socket::{TcpSocket, TcpSocketBuffer},
-    wire::{IpAddress}
 };
 
 pub struct RawsockInterfaceSet {
     lib: Box<dyn Library>,
     all_interf: Vec<rawsock::InterfaceDescription>,
     ip: smoltcp::wire::IpCidr,
+    filter: CString,
 }
 
 pub struct RawsockInterface<'a> {
@@ -33,21 +32,18 @@ pub struct RawsockInterface<'a> {
     mac: EthernetAddress,
     data_link: rawsock::DataLink,
 
-    iface: Option<EthernetInterface<'a, 'a, 'a, RawsockDevice>>,
-
-    port: ChannelPort<Packet>,
     interface: Arc<dyn DynamicInterface<'a> + 'a>,
-    recv_thread: Option<JoinHandle<()>>,
-    ip: smoltcp::wire::IpCidr,
 }
 
 impl RawsockInterfaceSet {
     pub fn new(lib: Box<dyn Library>, ip: IpCidr) -> Result<RawsockInterfaceSet, rawsock::Error> {
         let all_interf = lib.all_interfaces()?;
+        let filter = format!("net {}/{}", ip.address(), ip.prefix_len());
         Ok(RawsockInterfaceSet {
             lib,
             all_interf,
             ip,
+            filter: CString::new(filter)?
         })
     }
     pub fn lib_version(&self) -> rawsock::LibraryVersion {
@@ -57,63 +53,34 @@ impl RawsockInterfaceSet {
         let all_interf = self.all_interf.clone();
         let (opened, errored): (Vec<_>, _) = all_interf
             .into_iter()
-            .map(|i| self.create_device(i))
+            .map(|i| self.open_interface(i))
             .partition(Result::is_ok);
         (
             opened.into_iter().map(Result::unwrap).collect::<Vec<_>>(),
             errored.into_iter().map(|i| i.err().unwrap()).collect::<Vec<_>>()
         )
     }
-    fn create_device<'a>(&'a self, desc: InterfaceDescription) -> Result<RawsockInterface<'a>, ErrorWithDesc> {
-        self.create_device_inner(&desc).map_err(|err| { ErrorWithDesc(err, desc) })
+    fn open_interface<'a>(&'a self, desc: InterfaceDescription) -> Result<RawsockInterface<'a>, ErrorWithDesc> {
+        self.open_interface_inner(&desc).map_err(|err| { ErrorWithDesc(err, desc) })
     }
-    fn create_device_inner<'a>(&'a self, desc: &InterfaceDescription) -> Result<RawsockInterface<'a>, Error> {
+    fn open_interface_inner<'a>(&'a self, desc: &InterfaceDescription) -> Result<RawsockInterface<'a>, Error> {
         let name = &desc.name;
         let mut interface = self.lib.open_interface_arc(name)?;
-        Arc::get_mut(&mut interface).ok_or(Error::Other("Bad Arc"))?.set_filter("icmp")?;
+        Arc::get_mut(&mut interface).ok_or(Error::Other("Bad Arc"))?.set_filter_cstr(&self.filter)?;
 
         let data_link = interface.data_link();
         if let rawsock::DataLink::Ethernet = data_link {} else {
             return Err(Error::WrongDataLink(data_link));
         }
-
-        let (port1, port2) = ChannelPort::new();
-        let device = RawsockDevice {
-            port: port2
-        };
         let mac = get_mac(name)?;
-        
-        let ethernet_addr = mac.clone();
-        let neighbor_cache = NeighborCache::new(BTreeMap::new());
-        let ip_addrs = [
-            self.ip,
-        ];
-        let iface = Some(EthernetInterfaceBuilder::new(device)
-                .ethernet_addr(ethernet_addr)
-                .neighbor_cache(neighbor_cache)
-                .ip_addrs(ip_addrs)
-                .finalize());
 
         Ok(RawsockInterface {
             data_link,
             desc: desc.clone(),
-            port: port1,
-            iface,
             mac,
             interface,
-            recv_thread: None,
-            ip: self.ip.clone()
         })
     }
-}
-
-fn new_listening_socket<'a>() -> TcpSocket<'a> {
-    let mut listening_socket = TcpSocket::new(
-        TcpSocketBuffer::new(vec![0; 2048]),
-        TcpSocketBuffer::new(vec![0; 2048])
-    );
-    listening_socket.set_accept_all(true);
-    listening_socket
 }
 
 impl<'a> RawsockInterface<'a> {
@@ -126,71 +93,10 @@ impl<'a> RawsockInterface<'a> {
     pub fn data_link(&self) -> rawsock::DataLink {
         self.data_link
     }
-    // pub fn take_device(&mut self) -> Option<RawsockDevice> {
-    //     self.run();
-    //     self.device.take()
-    // }
-    // pub fn take_iface<'b, 'c, 'e>(&mut self) -> Option<EthernetInterface<'b, 'c, 'e, RawsockDevice>>
-    // {
-    //     let ethernet_addr = self.mac().clone();
-    //     let device = match self.take_device() {
-    //         Some(d) => d,
-    //         None => return None
-    //     };
-    //     let neighbor_cache = NeighborCache::new(BTreeMap::new());
-    //     let ip_addrs = [
-    //         self.ip,
-    //     ];
-    //     let iface = EthernetInterfaceBuilder::new(device)
-    //             .ethernet_addr(ethernet_addr)
-    //             .neighbor_cache(neighbor_cache)
-    //             .ip_addrs(ip_addrs)
-    //             .finalize();
-    //     Some(iface)
-    // }
-    fn run(&mut self) {
-        if let Some(_) = self.recv_thread {
-            return
-        }
-        let static_self = unsafe{hide_lt(self)};
-        let sender = self.port.clone_sender();
-        let interf = static_self.interface.clone();
-        let mut iface = match static_self.iface.take() {
-            Some(iface) => iface,
-            None => return
-        };
-        let recv_thread = Some(spawn(move || {
-            let r = interf.loop_infinite_dyn(&|packet| {
-                // s.set_readiness(Ready::readable()).unwrap();
-                match sender.send(packet.as_owned().to_vec()) {
-                    Ok(_) => (),
-                    Err(err) => warn!("recv error: {:?}", err)
-                }
-            });
-            if !r.is_ok() {
-                warn!("loop_infinite {:?}", r);
-            }
-            debug!("recv thread exit");
-        }));
-        let pool_thread = Some(spawn(move || {
-            let mut sockets = SocketSet::new(vec![]);
-            let mut listening_socket = new_listening_socket();
-            let listening_socket_handle = sockets.add(listening_socket);
-            loop {
-                let timestamp = Instant::now();
-                match iface.poll(&mut sockets, timestamp) {
-                    Ok(_) => {},
-                    Err(e) => {
-                        debug!("poll error: {}", e);
-                    }
-                }
-            }
-        }));
-        self.recv_thread = recv_thread;
+    pub fn interface(&self) -> &Arc<dyn DynamicInterface<'a> + 'a> {
+        &self.interface
     }
-}
-
-unsafe fn hide_lt<'a>(v: &mut (RawsockInterface<'a>)) -> &'a mut (RawsockInterface<'static>) {
-    use std::mem;
-    mem::transmute(v)
+    pub fn interface_mut(&mut self) -> &mut Arc<dyn DynamicInterface<'a> + 'a> {
+        &mut self.interface
+    }
 }
