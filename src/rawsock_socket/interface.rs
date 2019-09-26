@@ -15,22 +15,17 @@ use std::thread::{JoinHandle, spawn};
 use crate::channel_port::{ChannelPort, Sender};
 use log::{warn, debug};
 use super::{Error, ErrorWithDesc};
+use super::device::{RawsockDevice, Packet};
 
 use smoltcp::{
     socket::{TcpSocket, TcpSocketBuffer},
     wire::{IpAddress}
 };
 
-type Packet = Vec<u8>;
-
 pub struct RawsockInterfaceSet {
     lib: Box<dyn Library>,
     all_interf: Vec<rawsock::InterfaceDescription>,
     ip: smoltcp::wire::IpCidr,
-}
-
-pub struct RawsockDevice {
-    pub port: ChannelPort<Packet>,
 }
 
 pub struct RawsockInterface<'a> {
@@ -198,57 +193,4 @@ impl<'a> RawsockInterface<'a> {
 unsafe fn hide_lt<'a>(v: &mut (RawsockInterface<'a>)) -> &'a mut (RawsockInterface<'static>) {
     use std::mem;
     mem::transmute(v)
-}
-
-pub struct RawRxToken(Packet);
-
-impl RxToken for RawRxToken {
-    fn consume<R, F>(self, _timestamp: Instant, f: F) -> smoltcp::Result<R>
-        where F: (FnOnce(&[u8]) -> smoltcp::Result<R>)
-    {
-        let p = &self.0;
-        let result = f(p);
-        result
-    }
-}
-
-
-pub struct RawTxToken(Sender::<Packet>);
-
-impl<'a> TxToken for RawTxToken {
-    fn consume<R, F>(self, _timestamp: Instant, len: usize, f: F) -> smoltcp::Result<R>
-        where F: FnOnce(&mut [u8]) -> smoltcp::Result<R>
-    {
-        let mut buffer = Vec::new();
-        buffer.resize(len, 0);
-        let result = f(&mut buffer);
-        let sender = self.0;
-        let sent = sender.send(buffer);
-        if !sent.is_ok() {
-            println!("send failed {}", len);
-        }
-        result
-    }
-}
-
-impl<'d> smoltcp::phy::Device<'d> for RawsockDevice {
-    type RxToken = RawRxToken;
-    type TxToken = RawTxToken;
-
-    fn receive(&'d mut self) -> Option<(Self::RxToken, Self::TxToken)> {
-        self.port.try_recv().ok().map(|packet| {(
-            RawRxToken(packet),
-            RawTxToken(self.port.clone_sender())
-        )})
-    }
-    fn transmit(&'d mut self) -> Option<Self::TxToken> {
-        Some(RawTxToken(self.port.clone_sender()))
-    }
-
-    fn capabilities(&self) -> DeviceCapabilities {
-        let mut caps = DeviceCapabilities::default();
-        caps.max_transmission_unit = 1536;
-        caps.max_burst_size = Some(1);
-        caps
-    }
 }
