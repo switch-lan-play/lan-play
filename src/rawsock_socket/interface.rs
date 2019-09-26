@@ -13,8 +13,11 @@ use std::thread::{JoinHandle, spawn};
 use crate::channel_port::ChannelPort;
 use log::{warn, debug};
 use super::{Error, ErrorWithDesc};
-use super::device::{RawsockDevice, Packet};
 use std::ffi::{CStr, CString};
+use super::device::{ChannelDevice, Packet};
+use std::future::Future;
+use std::pin::Pin;
+use std::task::{Context, Poll};
 
 use smoltcp::{
     socket::{TcpSocket, TcpSocketBuffer},
@@ -27,15 +30,21 @@ pub struct RawsockInterfaceSet {
     filter: CString,
 }
 
-pub struct RawsockInterface<'a> {
+pub struct RawsockInterface<'a, 'b: 'a> {
     pub desc: InterfaceDescription,
     mac: EthernetAddress,
     data_link: rawsock::DataLink,
 
     interface: Arc<dyn DynamicInterface<'a> + 'a>,
+    iface: Option<EthernetInterface<'a, 'a, 'a, ChannelDevice>>,
+
+    port: ChannelPort<Packet>,
+    recv_thread: Option<JoinHandle<()>>,
+
+    _dummy: &'b std::marker::PhantomData<()>,
 }
 
-impl RawsockInterfaceSet {
+impl<'a> RawsockInterfaceSet {
     pub fn new(lib: Box<dyn Library>, ip: Ipv4Cidr) -> Result<RawsockInterfaceSet, rawsock::Error> {
         let all_interf = lib.all_interfaces()?;
         let filter = format!("net {}", ip.network());
@@ -44,7 +53,7 @@ impl RawsockInterfaceSet {
             lib,
             all_interf,
             ip,
-            filter: CString::new(filter)?
+            filter: CString::new(filter)?,
         })
     }
     pub fn lib_version(&self) -> rawsock::LibraryVersion {
@@ -61,10 +70,10 @@ impl RawsockInterfaceSet {
             errored.into_iter().map(|i| i.err().unwrap()).collect::<Vec<_>>()
         )
     }
-    fn open_interface<'a>(&'a self, desc: InterfaceDescription) -> Result<RawsockInterface<'a>, ErrorWithDesc> {
+    fn open_interface(&self, desc: InterfaceDescription) -> Result<RawsockInterface, ErrorWithDesc> {
         self.open_interface_inner(&desc).map_err(|err| { ErrorWithDesc(err, desc) })
     }
-    fn open_interface_inner<'a>(&'a self, desc: &InterfaceDescription) -> Result<RawsockInterface<'a>, Error> {
+    fn open_interface_inner(&self, desc: &InterfaceDescription) -> Result<RawsockInterface, Error> {
         let name = &desc.name;
         let mut interface = self.lib.open_interface_arc(name)?;
         Arc::get_mut(&mut interface).ok_or(Error::Other("Bad Arc"))?.set_filter_cstr(&self.filter)?;
@@ -74,17 +83,58 @@ impl RawsockInterfaceSet {
             return Err(Error::WrongDataLink(data_link));
         }
         let mac = get_mac(name)?;
+        
+        let (port1, port2) = ChannelPort::new();
+        let device = ChannelDevice::new(port2);
+
+        let ethernet_addr = mac.clone();
+        let neighbor_cache = NeighborCache::new(BTreeMap::new());
+        let ip_addrs = [
+            self.ip.into(),
+        ];
+        let iface = Some(EthernetInterfaceBuilder::new(device)
+                .ethernet_addr(ethernet_addr)
+                .neighbor_cache(neighbor_cache)
+                .ip_addrs(ip_addrs)
+                .finalize());
 
         Ok(RawsockInterface {
             data_link,
             desc: desc.clone(),
             mac,
             interface,
+            port: port1,
+            iface,
+            recv_thread: None,
+            _dummy: &std::marker::PhantomData,
         })
     }
 }
 
-impl<'a> RawsockInterface<'a> {
+struct Shit<'a, 'b: 'a, 'c: 'a> {
+    iface: &'a mut Option<EthernetInterface<'b, 'b, 'b, ChannelDevice>>,
+    sockets: &'a mut SocketSet<'c, 'c, 'c>,
+}
+
+impl<'a, 'b, 'c> Future for Shit<'a, 'b, 'c> {
+    type Output = smoltcp::Result<()>;
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
+        let timestamp = Instant::now();
+        let Shit { iface, sockets } = self;
+        let sockets = &mut self.sockets;
+        let iface = match &mut self.iface {
+            Some(iface) => iface,
+            None => return Poll::Pending
+        };
+        match iface.poll(sockets, timestamp) {
+            Ok(true) => Poll::Ready(Ok(())),
+            Ok(false) => Poll::Pending,
+            Err(e) => Poll::Ready(Err(e)),
+        }
+    }
+}
+
+impl<'b, 'a: 'b> RawsockInterface<'a, 'b> {
     pub fn name(&self) -> &String {
         &self.desc.name
     }
@@ -94,10 +144,60 @@ impl<'a> RawsockInterface<'a> {
     pub fn data_link(&self) -> rawsock::DataLink {
         self.data_link
     }
-    pub fn interface(&self) -> &Arc<dyn DynamicInterface<'a> + 'a> {
-        &self.interface
+    pub async fn run(&mut self) {
+        self.start_thread();
+        let mut sockets = SocketSet::new(vec![]);
+        let mut listening_socket = new_listening_socket();
+        let listening_socket_handle = sockets.add(listening_socket);
+        let mut iface = match self.iface.take() {
+            Some(iface) => iface,
+            None => return
+        };
+        loop {
+            Shit{
+                iface: &mut self.iface,
+                sockets: &mut sockets,
+            }.await;
+        }
     }
-    pub fn interface_mut(&mut self) -> &mut Arc<dyn DynamicInterface<'a> + 'a> {
-        &mut self.interface
+    fn start_thread(&mut self) {
+        if let Some(_) = self.recv_thread {
+            return
+        }
+        let static_self = unsafe{hide_lt(self)};
+        let sender = self.port.clone_sender();
+        let interf = static_self.interface.clone();
+        let mut iface = match static_self.iface.take() {
+            Some(iface) => iface,
+            None => return
+        };
+        let recv_thread = Some(spawn(move || {
+            let r = interf.loop_infinite_dyn(&|packet| {
+                // s.set_readiness(Ready::readable()).unwrap();
+                match sender.send(packet.as_owned().to_vec()) {
+                    Ok(_) => (),
+                    Err(err) => warn!("recv error: {:?}", err)
+                }
+            });
+            if !r.is_ok() {
+                warn!("loop_infinite {:?}", r);
+            }
+            debug!("recv thread exit");
+        }));
+        self.recv_thread = recv_thread;
     }
+}
+
+fn new_listening_socket<'a>() -> TcpSocket<'a> {
+    let mut listening_socket = TcpSocket::new(
+        TcpSocketBuffer::new(vec![0; 2048]),
+        TcpSocketBuffer::new(vec![0; 2048])
+    );
+    listening_socket.set_accept_all(true);
+    listening_socket
+}
+
+unsafe fn hide_lt<'a, 'b>(v: &mut (RawsockInterface<'a, 'b>)) -> &'a mut (RawsockInterface<'static, 'static>) {
+    use std::mem;
+    mem::transmute(v)
 }

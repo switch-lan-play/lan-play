@@ -8,8 +8,16 @@ use smoltcp::{
 use crate::channel_port::{ChannelPort, Sender};
 
 pub type Packet = Vec<u8>;
-pub struct RawsockDevice {
-    pub port: ChannelPort<Packet>,
+pub struct ChannelDevice {
+    port: ChannelPort<Packet>,
+}
+
+impl ChannelDevice {
+    pub fn new(port: ChannelPort<Packet>) -> ChannelDevice {
+        ChannelDevice {
+            port
+        }
+    }
 }
 
 pub struct RawRxToken(Packet);
@@ -43,7 +51,7 @@ impl<'a> TxToken for RawTxToken {
     }
 }
 
-impl<'d> smoltcp::phy::Device<'d> for RawsockDevice {
+impl<'d> smoltcp::phy::Device<'d> for ChannelDevice {
     type RxToken = RawRxToken;
     type TxToken = RawTxToken;
 
