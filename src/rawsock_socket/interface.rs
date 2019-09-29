@@ -112,21 +112,16 @@ impl<'a> RawsockInterfaceSet {
 }
 
 struct Shit<'a, 'b: 'a, 'c: 'a> {
-    iface: &'a mut Option<EthernetInterface<'b, 'b, 'b, ChannelDevice>>,
+    iface: &'a mut EthernetInterface<'b, 'b, 'b, ChannelDevice>,
     sockets: &'a mut SocketSet<'c, 'c, 'c>,
 }
 
-impl<'a, 'b, 'c> Future for Shit<'a, 'b, 'c> {
+impl Future for Shit<'_, '_, '_> {
     type Output = smoltcp::Result<()>;
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
+        let shit = self.get_mut();
         let timestamp = Instant::now();
-        let Shit { iface, sockets } = self;
-        let sockets = &mut self.sockets;
-        let iface = match &mut self.iface {
-            Some(iface) => iface,
-            None => return Poll::Pending
-        };
-        match iface.poll(sockets, timestamp) {
+        match shit.iface.poll(&mut shit.sockets, timestamp) {
             Ok(true) => Poll::Ready(Ok(())),
             Ok(false) => Poll::Pending,
             Err(e) => Poll::Ready(Err(e)),
@@ -155,7 +150,7 @@ impl<'b, 'a: 'b> RawsockInterface<'a, 'b> {
         };
         loop {
             Shit{
-                iface: &mut self.iface,
+                iface: &mut iface,
                 sockets: &mut sockets,
             }.await;
         }
