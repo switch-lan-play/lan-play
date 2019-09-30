@@ -1,4 +1,6 @@
+#[feature("async-await")]
 #[macro_use] extern crate cfg_if;
+#[macro_use] extern crate futures;
 
 mod rawsock_socket;
 mod get_addr;
@@ -20,7 +22,7 @@ async fn fuck() {
         Ipv4Cidr::new(Ipv4Address::new(10, 13, 37, 2), 16),
     ).expect("Could not open any packet capturing library");
     println!("Library opened, version is {}", set.lib_version());
-    let (opened, errored): (Vec<_>, _) = set.open_all_interface();
+    let (mut opened, errored): (Vec<_>, _) = set.open_all_interface();
 
     for ErrorWithDesc(err, desc) in errored {
         log::warn!("Err: Interface {:?} err {:?}", desc.name, err);
@@ -31,14 +33,9 @@ async fn fuck() {
         println!("Interface {} opened, mac: {}, data link: {}", name, interface.mac(), interface.data_link());
     }
 
-    let mut tcp2_socket = TcpSocket::new(
-        TcpSocketBuffer::new(vec![0; 64]),
-        TcpSocketBuffer::new(vec![0; 128])
-    );
-    tcp2_socket.set_accept_all(true);
+    let mut interf = opened.remove(0);
 
-    let mut sockets = SocketSet::new(vec![]);
-    let tcp2_handle = sockets.add(tcp2_socket);
+    futures::join!(interf.run());
 
     // let mut tcp2_active = false;
     // set.start(&mut sockets, opened, &mut move |sockets| {

@@ -76,7 +76,7 @@ impl<'a> RawsockInterfaceSet {
     fn open_interface_inner(&self, desc: &InterfaceDescription) -> Result<RawsockInterface, Error> {
         let name = &desc.name;
         let mut interface = self.lib.open_interface_arc(name)?;
-        Arc::get_mut(&mut interface).ok_or(Error::Other("Bad Arc"))?.set_filter_cstr(&self.filter)?;
+        // Arc::get_mut(&mut interface).ok_or(Error::Other("Bad Arc"))?.set_filter_cstr(&self.filter)?;
 
         let data_link = interface.data_link();
         if let rawsock::DataLink::Ethernet = data_link {} else {
@@ -121,11 +121,14 @@ impl Future for Shit<'_, '_, '_> {
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
         let shit = self.get_mut();
         let timestamp = Instant::now();
-        match shit.iface.poll(&mut shit.sockets, timestamp) {
+        println!("begin poll");
+        let ret = match shit.iface.poll(&mut shit.sockets, timestamp) {
             Ok(true) => Poll::Ready(Ok(())),
             Ok(false) => Poll::Pending,
             Err(e) => Poll::Ready(Err(e)),
-        }
+        };
+        println!("end poll");
+        ret
     }
 }
 
@@ -149,10 +152,12 @@ impl<'b, 'a: 'b> RawsockInterface<'a, 'b> {
             None => return
         };
         loop {
+            println!("Shit1");
             Shit{
                 iface: &mut iface,
                 sockets: &mut sockets,
-            }.await;
+            }.await.unwrap();
+            println!("Shit2");
         }
     }
     fn start_thread(&mut self) {
@@ -162,10 +167,6 @@ impl<'b, 'a: 'b> RawsockInterface<'a, 'b> {
         let static_self = unsafe{hide_lt(self)};
         let sender = self.port.clone_sender();
         let interf = static_self.interface.clone();
-        let mut iface = match static_self.iface.take() {
-            Some(iface) => iface,
-            None => return
-        };
         let recv_thread = Some(spawn(move || {
             let r = interf.loop_infinite_dyn(&|packet| {
                 // s.set_readiness(Ready::readable()).unwrap();
