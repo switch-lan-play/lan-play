@@ -167,7 +167,7 @@ impl<'b, 'a: 'b> RawsockInterface<'a, 'b> {
         let static_self = unsafe{hide_lt(self)};
         let sender = self.port.clone_sender();
         let interf = static_self.interface.clone();
-        let recv_thread = Some(spawn(move || {
+        self.recv_thread = Some(spawn(move || {
             let r = interf.loop_infinite_dyn(&|packet| {
                 // s.set_readiness(Ready::readable()).unwrap();
                 match sender.send(packet.as_owned().to_vec()) {
@@ -180,7 +180,6 @@ impl<'b, 'a: 'b> RawsockInterface<'a, 'b> {
             }
             debug!("recv thread exit");
         }));
-        self.recv_thread = recv_thread;
     }
 }
 
