@@ -1,4 +1,4 @@
-use crate::get_addr::GetAddressError;
+use crate::interface_info::GetAddressError;
 use rawsock::InterfaceDescription;
 
 #[derive(Debug)]

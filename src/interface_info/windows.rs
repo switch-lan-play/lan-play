@@ -1,12 +1,12 @@
 extern crate libc;
-use super::{GetAddressError};
-use smoltcp::wire::{EthernetAddress};
+use super::{GetAddressError, InterfaceInfo};
+use smoltcp::wire::EthernetAddress;
 use std::{mem, ptr};
 
 const NO_ERROR: u32 = 0;
 const ERROR_INSUFFICIENT_BUFFER: u32 = 122;
 
-fn get_guid<'a>(s: &'a String) -> Option<&'a str> {
+fn get_guid(s: &str) -> Option<&str> {
     if let Some(pos) = s.find('{') {
         let p = pos + 1;
         if let Some(end) = s[p..].find('}') {
@@ -27,10 +27,12 @@ fn from_u16(s: &[u16]) -> Option<String> {
     return None;
 }
 
-pub fn get_mac(name: &String) -> Result<EthernetAddress, GetAddressError> {
+pub fn get_interface_info(name: &str) -> Result<InterfaceInfo, GetAddressError> {
     if let Some(intf_guid) = get_guid(name) {
         let mut size = 0u32;
         let mut table: *mut MibIftable = ptr::null_mut();
+
+        let mut info = InterfaceInfo::new(name);
 
         unsafe {
             if GetIfTable(
@@ -54,10 +56,17 @@ pub fn get_mac(name: &String) -> Result<EthernetAddress, GetAddressError> {
                     if let Some(name) = from_u16(&row.wsz_name) {
                         if let Some(guid) = get_guid(&name) {
                             if guid == intf_guid {
-                                let len = row.dw_phys_addr_len;
-                                if len == 6 {
-                                    return Ok(EthernetAddress::from_bytes(&row.b_phys_addr[0..6]));
+                                if row.dw_phys_addr_len == 6 {
+                                    info.ethernet_address = EthernetAddress::from_bytes(&row.b_phys_addr[0..6]);
+                                } else {
+                                    continue;
                                 }
+                                if row.dw_descr_len > 0 {
+                                    if let Ok(desc) = String::from_utf8(row.b_descr[..(row.dw_descr_len - 1) as usize].to_vec()) {
+                                        info.description = Some(desc);
+                                    }
+                                }
+                                return Ok(info);
                             }
                         }
                     }
@@ -83,8 +92,9 @@ pub(crate) struct MibIfrow {
     pub dw_speed: u32,
     pub dw_phys_addr_len: u32,
     pub b_phys_addr: [u8; MAXLEN_PHYSADDR],
-    _padding1: [u8; 16 * 4],
-    _padding2: [u8; MAXLEN_IFDESCR],
+    _padding1: [u8; 15 * 4],
+    pub dw_descr_len: u32,
+    pub b_descr: [u8; MAXLEN_IFDESCR],
 }
 
 #[repr(C)]

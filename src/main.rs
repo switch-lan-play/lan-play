@@ -1,11 +1,11 @@
-#[feature("async-await")]
 #[macro_use] extern crate cfg_if;
 #[macro_use] extern crate futures;
 
 mod rawsock_socket;
-mod get_addr;
+mod interface_info;
 mod channel_port;
 
+use futures::future::join_all;
 use rawsock_socket::{ErrorWithDesc, RawsockInterfaceSet};
 use smoltcp::{
     iface::{EthernetInterfaceBuilder},
@@ -25,17 +25,17 @@ async fn fuck() {
     let (mut opened, errored): (Vec<_>, _) = set.open_all_interface();
 
     for ErrorWithDesc(err, desc) in errored {
-        log::warn!("Err: Interface {:?} err {:?}", desc.name, err);
+        log::warn!("Err: Interface {:?}({:?}) err {:?}", desc.name, desc.description, err);
     }
 
     for interface in &opened {
         let name = interface.name();
-        println!("Interface {} opened, mac: {}, data link: {}", name, interface.mac(), interface.data_link());
+        println!("Interface {}({}) opened, mac: {}, data link: {}", name, interface.desc.description, interface.mac(), interface.data_link());
     }
 
-    let mut interf = opened.remove(0);
+    let futures: Vec<_> = opened.into_iter().map(|mut i| i.run()).collect();
 
-    futures::join!(interf.run());
+    join_all(futures);
 
     // let mut tcp2_active = false;
     // set.start(&mut sockets, opened, &mut move |sockets| {
@@ -82,6 +82,6 @@ async fn fuck() {
 
 #[tokio::main]
 async fn main() {
-    env_logger::init().unwrap();
+    env_logger::init();
     fuck().await
 }
