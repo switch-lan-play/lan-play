@@ -5,6 +5,7 @@ mod rawsock_socket;
 mod interface_info;
 mod channel_port;
 
+use std::future::Future;
 use futures::future::join_all;
 use rawsock_socket::{ErrorWithDesc, RawsockInterfaceSet};
 use smoltcp::{
@@ -28,14 +29,15 @@ async fn fuck() {
         log::warn!("Err: Interface {:?}({:?}) err {:?}", desc.name, desc.description, err);
     }
 
-    for interface in &opened {
-        let name = interface.name();
-        println!("Interface {}({}) opened, mac: {}, data link: {}", name, interface.desc.description, interface.mac(), interface.data_link());
+    let mut futures: Vec<_> = vec![];
+    for interface in &mut opened {
+        let name = interface.name().clone();
+        println!("Interface {} ({}) opened, mac: {}, data link: {}", name, interface.desc.description, interface.mac(), interface.data_link());
+        let future = interface.run();
+        futures.push(future);
     }
 
-    let futures: Vec<_> = opened.into_iter().map(|mut i| i.run()).collect();
-
-    join_all(futures);
+    let _ = join_all(futures).await;
 
     // let mut tcp2_active = false;
     // set.start(&mut sockets, opened, &mut move |sockets| {

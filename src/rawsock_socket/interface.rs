@@ -76,7 +76,7 @@ impl<'a> RawsockInterfaceSet {
     fn open_interface_inner(&self, desc: &mut InterfaceDescription) -> Result<RawsockInterface, Error> {
         let name = &desc.name;
         let mut interface = self.lib.open_interface_arc(name)?;
-        // Arc::get_mut(&mut interface).ok_or(Error::Other("Bad Arc"))?.set_filter_cstr(&self.filter)?;
+        Arc::get_mut(&mut interface).ok_or(Error::Other("Bad Arc"))?.set_filter_cstr(&self.filter)?;
 
         let data_link = interface.data_link();
         if let rawsock::DataLink::Ethernet = data_link {} else {
@@ -84,7 +84,7 @@ impl<'a> RawsockInterfaceSet {
         }
         let InterfaceInfo {
             ethernet_address: mac,
-            name,
+            name: _,
             description
         } = get_interface_info(name)?;
         if let Some(description) = description {
