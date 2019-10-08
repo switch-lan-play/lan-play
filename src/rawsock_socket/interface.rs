@@ -149,6 +149,9 @@ impl<'a> RawsockInterface<'a> {
     pub fn data_link(&self) -> rawsock::DataLink {
         self.data_link
     }
+    pub fn clone_interface(&self) -> Arc<dyn DynamicInterface<'a> + 'a> {
+        self.interface.clone()
+    }
     pub async fn run(&mut self) {
         self.start_thread();
         let mut sockets = SocketSet::new(vec![]);

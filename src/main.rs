@@ -5,8 +5,10 @@ mod rawsock_socket;
 mod interface_info;
 mod channel_port;
 
+use tokio::net::signal;
+use futures::{StreamExt, future};
 use std::future::Future;
-use futures::future::join_all;
+use futures::future::{join_all, join};
 use rawsock_socket::{ErrorWithDesc, RawsockInterfaceSet};
 use smoltcp::{
     iface::{EthernetInterfaceBuilder},
@@ -14,19 +16,18 @@ use smoltcp::{
     wire::{Ipv4Cidr, Ipv4Address}
 };
 
-async fn fuck() {
+async fn run_interfaces() {
     println!("Opening packet capturing library");
 
     let lib = rawsock::open_best_library().expect("Can't open any library");
-    let sockets = SocketSet::new(vec![]);
     let set = RawsockInterfaceSet::new(lib,
         Ipv4Cidr::new(Ipv4Address::new(10, 13, 37, 2), 16),
     ).expect("Could not open any packet capturing library");
     println!("Library opened, version is {}", set.lib_version());
-    let (mut opened, errored): (Vec<_>, _) = set.open_all_interface();
+    let (mut opened, errored) = set.open_all_interface();
 
     for ErrorWithDesc(err, desc) in errored {
-        log::warn!("Err: Interface {:?}({:?}) err {:?}", desc.name, desc.description, err);
+        log::warn!("Err: Interface {:?} ({:?}) err {:?}", desc.name, desc.description, err);
     }
 
     let mut futures: Vec<_> = vec![];
@@ -37,7 +38,7 @@ async fn fuck() {
         futures.push(future);
     }
 
-    let _ = join_all(futures).await;
+    join_all(futures).await;
 
     // let mut tcp2_active = false;
     // set.start(&mut sockets, opened, &mut move |sockets| {
@@ -83,7 +84,10 @@ async fn fuck() {
 }
 
 #[tokio::main]
-async fn main() {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     env_logger::init();
-    fuck().await
+
+    run_interfaces().await;
+
+    Ok(())
 }

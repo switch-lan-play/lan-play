@@ -14,7 +14,7 @@ pub fn get_interface_info(name: &str) -> Result<InterfaceInfo, GetAddressError> 
     use nix::{ifaddrs::{getifaddrs}, sys::socket::SockAddr};
     let addrs = getifaddrs()?;
     for ifaddr in addrs {
-        if ifaddr.interface_name != *name {
+        if ifaddr.interface_name != name {
             continue;
         }
         if let Some(SockAddr::Link(link)) = ifaddr.address {
