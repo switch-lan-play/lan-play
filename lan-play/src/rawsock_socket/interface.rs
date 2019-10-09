@@ -155,8 +155,7 @@ impl<'a> RawsockInterface<'a> {
     pub async fn run(&mut self) {
         self.start_thread();
         let mut sockets = SocketSet::new(vec![]);
-        let mut listening_socket = new_listening_socket();
-        let listening_socket_handle = sockets.add(listening_socket);
+        let mut listening_socket_handle = sockets.add(new_listening_socket());
         let mut iface = match self.iface.take() {
             Some(iface) => iface,
             None => return
@@ -170,6 +169,22 @@ impl<'a> RawsockInterface<'a> {
                 Ok(_) => (),
                 Err(_) => (),
             };
+            while let Ok(data) = self.port.try_recv() {
+                self.interface.send(&data);
+            }
+            let mut need_new_listen = false;
+            {
+                let mut socket = sockets.get::<TcpSocket>(listening_socket_handle);
+                if socket.can_send() {
+                    need_new_listen = true;
+                    debug!("shit I get it");
+                }
+            }
+            if need_new_listen {
+                listening_socket_handle = sockets.add(new_listening_socket());
+                sockets.prune();
+                debug!("size {}", sockets.iter().count());
+            }
         }
     }
     fn start_thread(&mut self) {
@@ -183,7 +198,6 @@ impl<'a> RawsockInterface<'a> {
         let waker = static_self.waker.clone();
         self.recv_thread = Some(spawn(move || {
             let r = interf.loop_infinite_dyn(&|packet| {
-                // s.set_readiness(Ready::readable()).unwrap();
                 if let Some(waker) = waker.lock().unwrap().take() {
                     waker.wake();
                 }
@@ -206,6 +220,7 @@ fn new_listening_socket<'a>() -> TcpSocket<'a> {
         TcpSocketBuffer::new(vec![0; 2048])
     );
     listening_socket.set_accept_all(true);
+    listening_socket.listen(1).unwrap();
     listening_socket
 }
 

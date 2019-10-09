@@ -1,0 +1,36 @@
+[package]
+name = "lan-play"
+version = "0.1.0"
+authors = ["spacemeowx2 <spacemeowx2@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+tokio = { version = "=0.2.0-alpha.6", features = ["signal"] }
+tokio-net = "=0.2.0-alpha.6"
+rawsock = "0.3"
+crossbeam-utils = "0.6"
+env_logger = "0.7"
+log = "0.4"
+# hyper = "0.12"
+futures-preview = { version = "=0.3.0-alpha.19", default-features = false, features = ["alloc", "async-await"] }
+mio = "0.6"
+cfg-if = "0.1"
+
+[dependencies.smoltcp]
+# version = "0.5.0"
+git = "https://github.com/switch-lan-play/smoltcp.git"
+branch = "accept-all-master"
+default-features = false
+features = [
+    "std", "log",
+    "proto-ipv4", "proto-ipv6",
+    "socket-tcp", "socket-udp", "socket-icmp",
+    "verbose",
+    "socket-accept-all", "arp-fake-subnet"
+]
+
+[target.'cfg(windows)'.dependencies]
+libc = "0.2"
+
+[target.'cfg(unix)'.dependencies]
+nix = "0.15"
