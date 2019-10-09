@@ -18,6 +18,7 @@ use super::device::{ChannelDevice, Packet};
 use std::future::Future;
 use std::pin::Pin;
 use std::task::{Context, Poll, Waker};
+use tokio::timer::Timeout;
 
 use smoltcp::{
     socket::{TcpSocket, TcpSocketBuffer},
@@ -120,7 +121,7 @@ impl<'a> RawsockInterfaceSet {
 struct PollSocket<'a, 'b: 'a, 'c: 'a> {
     iface: &'a mut EthernetInterface<'b, 'b, 'b, ChannelDevice>,
     sockets: &'a mut SocketSet<'c, 'c, 'c>,
-    waker: Arc<Mutex<Option<Waker>>>,
+    waker: &'a Arc<Mutex<Option<Waker>>>,
 }
 
 impl Future for PollSocket<'_, '_, '_> {
@@ -160,11 +161,12 @@ impl<'a> RawsockInterface<'a> {
             Some(iface) => iface,
             None => return
         };
+        let waker = self.waker.clone();
         loop {
             match (PollSocket{
                 iface: &mut iface,
                 sockets: &mut sockets,
-                waker: self.waker.clone(),
+                waker: &waker,
             }.await) {
                 Ok(_) => (),
                 Err(_) => (),
@@ -178,6 +180,7 @@ impl<'a> RawsockInterface<'a> {
                 if socket.can_send() {
                     need_new_listen = true;
                     debug!("shit I get it");
+                    socket.close();
                 }
             }
             if need_new_listen {
