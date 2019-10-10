@@ -19,6 +19,7 @@ pub use crate::pcap_common::constants::SUCCESS;
 ///Dynamic link library interface for pcap.so
 #[derive(WrapperApi)]
 pub struct PCapDll{
+    pcap_create: unsafe extern "C" fn(devicename: *const c_char, errbuf: * mut c_char) -> * const PCapHandle,
     pcap_open_live: unsafe extern "C" fn(devicename: *const c_char, snap_length:c_uint, is_promiscuous: c_uint, read_timeout: c_uint, errbuf: * mut c_char) -> * const PCapHandle,
     pcap_open_offline_with_tstamp_precision: unsafe extern "C" fn (fname: * const c_char, precision: c_uint, errbuf: * mut c_char) -> * const PCapHandle,
     pcap_open_offline: unsafe extern "C" fn (fname: * const c_char, errbuf: * mut c_char) -> * const PCapHandle,
@@ -29,7 +30,7 @@ pub struct PCapDll{
     pcap_close: unsafe extern "C" fn(handle: * const PCapHandle),
     pcap_activate: unsafe extern "C" fn (handle: * const PCapHandle) -> c_int,
     pcap_file: unsafe extern "C" fn (p: * const PCapHandle) -> * mut FILE,
-
+    pcap_fileno: unsafe extern "C" fn (p: * const PCapHandle) -> c_int,
 
     //configuration
     pcap_set_snaplen: unsafe extern "C" fn(p: * const PCapHandle, snaplen: c_int) -> c_int,
@@ -47,6 +48,7 @@ pub struct PCapDll{
     pcap_tstamp_type_name_to_val: unsafe extern "C" fn (name: * const c_char) -> c_int,
     pcap_set_tstamp_precision: unsafe extern "C" fn (p: * const PCapHandle, tstamp_precision: c_int) -> c_int,
     pcap_get_tstamp_precision: unsafe extern "C" fn (p: * const PCapHandle) -> c_int,
+    pcap_set_immediate_mode: unsafe extern "C" fn (p: * const PCapHandle, immediate_mode :c_int) -> c_int,
 
 
     pcap_is_swapped: unsafe extern "C" fn (p: * const PCapHandle) -> c_int,

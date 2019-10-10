@@ -2,14 +2,11 @@
 
 members = [
   "lan-play",
+  "rawsock",
 ]
 
 [patch.'https://github.com/switch-lan-play/smoltcp.git'.smoltcp]
 path = '../smoltcp'
-
-[patch.crates-io.rawsock]
-git = "https://github.com/spacemeowx2/rust-rawsock.git"
-branch = "feature-filter"
 
 [profile.release]
 opt-level = "z"

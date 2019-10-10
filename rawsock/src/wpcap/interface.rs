@@ -31,7 +31,7 @@ impl<'a> Interface<'a> {
         let handle = unsafe { dll.pcap_open_live(
             name.as_ptr(),
             65536,                  /* max packet size */
-            8,                      /* promiscuous mode */
+            1,                      /* promiscuous mode */
             1000,                   /* read timeout in milliseconds */
             errbuf.buffer()
         )};
@@ -46,17 +46,31 @@ impl<'a> Interface<'a> {
             _=> DataLink::Other
         };
 
-        Ok(Interface {
+        let mut ret = Interface {
             dll,
             queue,
             handle,
             datalink,
-        })
+        };
+
+        #[cfg(feature = "immediate_mode")]
+        ret.set_immediate_mode()?;
+
+        Ok(ret)
     }
 
     fn last_error(&self) -> Error {
         let cerr = unsafe{self.dll.pcap_geterr(self.handle)};
         Error::LibraryError(cstr_to_string(cerr))
+    }
+
+    #[cfg(feature = "immediate_mode")]
+    fn set_immediate_mode(&mut self) -> Result<(), Error> {
+        if SUCCESS == unsafe { self.dll.pcap_setmintocopy(self.handle, 0) } {
+            Ok(())
+        } else {
+            Err(self.last_error())
+        }
     }
 }
 

@@ -11,7 +11,7 @@ pub enum LibraryVersion{
 impl Display for LibraryVersion {
     fn fmt(&self, f: &mut Formatter) -> Result<(), FmtError> {
         match self {
-            LibraryVersion::PCap(ver) => write!(f, " pcap {}", ver),
+            LibraryVersion::PCap(ver) => write!(f, "pcap {}", ver),
             LibraryVersion::WPCap(ver) => write!(f, "wpcap {}", ver),
             LibraryVersion::PFRing(ver) => write!(f, "pfring {}", ver)
         }

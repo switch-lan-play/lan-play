@@ -42,6 +42,7 @@ pub struct WPCapDll {
     pcap_datalink: unsafe extern "C" fn(handle: *const PCapHandle) -> c_int,
     pcap_dump: unsafe extern "C" fn (user: * mut c_uchar, h: * mut PCapPacketHeader, sp: * mut c_uchar),
     pcap_dump_ftell: unsafe extern "C" fn (p: * mut PCapDumper) -> c_long,
+    pcap_setmintocopy: unsafe extern "C" fn(handle: *const PCapHandle, size: c_int) -> c_int,
     //devices
     pcap_findalldevs: unsafe extern "C" fn(alldevsp: *mut *const PCapInterface, errbuf: *const c_char) -> c_int,
     pcap_freealldevs: unsafe extern "C" fn(alldevs: *const PCapInterface),

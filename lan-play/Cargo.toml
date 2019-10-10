@@ -7,7 +7,7 @@ edition = "2018"
 [dependencies]
 tokio = { version = "=0.2.0-alpha.6", features = ["signal"] }
 tokio-net = "=0.2.0-alpha.6"
-rawsock = "0.3"
+rawsock = { version = "0.3", path = "../rawsock" }
 crossbeam-utils = "0.6"
 env_logger = "0.7"
 log = "0.4"

@@ -3,7 +3,7 @@ use crate::{Error,  BorrowedPacket, DataLink, traits, Stats};
 use super::dll::{PCapHandle, PCapDll, PCapPacketHeader};
 use super::dll::helpers::PCapErrBuf;
 use super::structs::PCapStat;
-use libc::{ c_int};
+use libc::{c_int, c_ulong, ioctl};
 use std::mem::{uninitialized, transmute};
 use crate::utils::cstr_to_string;
 use std::sync::Mutex;
@@ -26,37 +26,86 @@ pub struct Interface<'a> {
 unsafe impl<'a> Sync for Interface<'a> {}
 unsafe impl<'a> Send for Interface<'a> {}
 
-
 impl<'a> Interface<'a> {
     pub fn new(name: &str, dll: &'a PCapDll) ->Result<Self, Error> {
         let name = CString::new(name)?;
         let mut errbuf =  PCapErrBuf::new();
-        let handle = unsafe { dll.pcap_open_live(
+        let handle = unsafe { dll.pcap_create(
             name.as_ptr(),
-            65536,                  /* max packet size */
-            8,                      /* promiscuous mode */
-            1000,                   /* read timeout in milliseconds */
             errbuf.buffer()
         )};
+        macro_rules! check_err {
+            ( $ret:expr ) => {{
+                if SUCCESS != $ret {
+                    let cerr = unsafe{dll.pcap_geterr(handle)};
+                    return Err(Error::LibraryError(cstr_to_string(cerr)))
+                }
+            }}
+        }
         if handle.is_null() {
             return Err(Error::OpeningInterface(errbuf.as_string()))
         }
+
+        let mut ret = Interface {
+            dll,
+            handle,
+            datalink: DataLink::Other,
+        };
+
+        unsafe {
+            check_err!(dll.pcap_set_snaplen(handle, 65536));
+            check_err!(dll.pcap_set_promisc(handle, 1));
+            check_err!(dll.pcap_set_timeout(handle, 1000));
+
+            #[cfg(feature = "immediate_mode")]
+            ret.set_immediate_mode()?;
+
+            check_err!(dll.pcap_activate(handle));
+        }
+
         let datalink = match unsafe{dll.pcap_datalink(handle)}{
             1 => DataLink::Ethernet,
             12 => DataLink::RawIp,
-            _=> DataLink::Other
+            _=> DataLink::Other,
         };
-
-        Ok(Interface {
-            dll,
-            handle,
-            datalink,
-        })
+        ret.datalink = datalink;
+        Ok(ret)
     }
 
     fn last_error(&self) -> Error {
         let cerr = unsafe{self.dll.pcap_geterr(self.handle)};
         Error::LibraryError(cstr_to_string(cerr))
+    }
+
+    #[cfg(feature = "immediate_mode")]
+    fn set_immediate_mode(&mut self) -> Result<(), Error> {
+        // TODO: libpcap >= 1.5.0 has pcap_set_immediate_mode
+        if true {
+            if SUCCESS == unsafe { self.dll.pcap_set_immediate_mode(self.handle, 1) } {
+                Ok(())
+            } else {
+                Err(self.last_error())
+            }
+        } else {
+            #[cfg(any(target_os = "macos", target_os = "ios"))]
+            unsafe {
+                let fd = self.dll.pcap_fileno(self.handle);
+                let on: c_int = 1;
+                if (fd == -1) {
+                    return Err(Error::LibraryError("fileno"));
+                }
+                if 0 == ioctl(fd, libc::BIOCIMMEDIATE, &on as * const c_int) {
+                    Ok(())
+                } else {
+                    Err(Error::LibraryError("ioctl"))
+                }
+            }
+            #[cfg(target_os = "linux")]
+            {
+                // libpcap < 1.5.0 is always on immediate mode
+                Ok(())
+            }
+        }
     }
 }
 

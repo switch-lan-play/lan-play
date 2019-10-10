@@ -17,6 +17,12 @@ branch = "master"
 [badges.is-it-maintained-open-issues]
 repository = "szymonwieloch/rust-rawsock"
 
+[features]
+default = [
+    "immediate_mode"
+]
+immediate_mode = []
+
 [dependencies]
 dlopen = "0.1.7"
 dlopen_derive = "0.1.4"
