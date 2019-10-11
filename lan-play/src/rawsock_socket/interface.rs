@@ -4,7 +4,7 @@ use rawsock::traits::{DynamicInterface, Library};
 use rawsock::InterfaceDescription;
 use smoltcp::{
     iface::{EthernetInterfaceBuilder, NeighborCache, EthernetInterface},
-    wire::{IpCidr, EthernetAddress, Ipv4Cidr},
+    wire::{EthernetAddress, Ipv4Cidr},
     socket::{SocketSet},
     time::{Instant},
 };
@@ -13,12 +13,11 @@ use std::thread::{JoinHandle, spawn};
 use crate::channel_port::ChannelPort;
 use log::{warn, debug};
 use super::{Error, ErrorWithDesc};
-use std::ffi::{CStr, CString};
+use std::ffi::CString;
 use super::device::{ChannelDevice, Packet};
 use std::future::Future;
 use std::pin::Pin;
 use std::task::{Context, Poll, Waker};
-use tokio::timer::Timeout;
 
 use smoltcp::{
     socket::{TcpSocket, TcpSocketBuffer},
@@ -115,7 +114,7 @@ impl<'a> RawsockInterfaceSet {
             iface,
             recv_thread: None,
             waker: Arc::new(Mutex::new(None)),
-            sockets: SocketSet::new(vec![])
+            sockets: SocketSet::new(vec![]),
         })
     }
 }
@@ -128,7 +127,7 @@ struct PollSocket<'a, 'b: 'a, 'c: 'a> {
 
 impl Future for PollSocket<'_, '_, '_> {
     type Output = smoltcp::Result<()>;
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
+    fn poll(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
         let this = self.get_mut();
         let mut waker = this.waker.lock().unwrap();
         waker.replace(cx.waker().clone());
@@ -152,9 +151,6 @@ impl<'a> RawsockInterface<'a> {
     pub fn data_link(&self) -> rawsock::DataLink {
         self.data_link
     }
-    pub fn clone_interface(&self) -> Arc<dyn DynamicInterface<'a> + 'a> {
-        self.interface.clone()
-    }
     pub async fn run(&mut self) {
         self.start_thread();
         let mut sockets = &mut self.sockets;
@@ -170,7 +166,7 @@ impl<'a> RawsockInterface<'a> {
                 Err(_) => (),
             };
             while let Ok(data) = self.port.try_recv() {
-                self.interface.send(&data);
+                let _ = self.interface.send(&data);
             }
             let mut need_new_listen = false;
             {

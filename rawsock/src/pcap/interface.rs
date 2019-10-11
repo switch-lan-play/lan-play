@@ -35,9 +35,9 @@ impl<'a> Interface<'a> {
             errbuf.buffer()
         )};
         macro_rules! check_err {
-            ( $ret:expr ) => {{
+            ( $ret:expr ) => {unsafe{
                 if SUCCESS != $ret {
-                    let cerr = unsafe{dll.pcap_geterr(handle)};
+                    let cerr = dll.pcap_geterr(handle);
                     return Err(Error::LibraryError(cstr_to_string(cerr)))
                 }
             }}
@@ -52,16 +52,14 @@ impl<'a> Interface<'a> {
             datalink: DataLink::Other,
         };
 
-        unsafe {
-            check_err!(dll.pcap_set_snaplen(handle, 65536));
-            check_err!(dll.pcap_set_promisc(handle, 1));
-            check_err!(dll.pcap_set_timeout(handle, 1000));
+        check_err!(dll.pcap_set_snaplen(handle, 65536));
+        check_err!(dll.pcap_set_promisc(handle, 1));
+        check_err!(dll.pcap_set_timeout(handle, 1000));
 
-            #[cfg(feature = "immediate_mode")]
-            ret.set_immediate_mode()?;
+        #[cfg(feature = "immediate_mode")]
+        ret.set_immediate_mode()?;
 
-            check_err!(dll.pcap_activate(handle));
-        }
+        check_err!(dll.pcap_activate(handle));
 
         let datalink = match unsafe{dll.pcap_datalink(handle)}{
             1 => DataLink::Ethernet,
