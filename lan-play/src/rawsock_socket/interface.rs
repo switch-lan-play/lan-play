@@ -37,7 +37,8 @@ pub struct RawsockInterface<'a> {
     data_link: rawsock::DataLink,
 
     interface: Arc<dyn DynamicInterface<'a> + 'a>,
-    iface: Option<EthernetInterface<'a, 'a, 'a, ChannelDevice>>,
+    iface: EthernetInterface<'static, 'static, 'static, ChannelDevice>,
+    sockets: SocketSet<'static, 'static, 'static>,
 
     port: ChannelPort<Packet>,
     recv_thread: Option<JoinHandle<()>>,
@@ -99,11 +100,11 @@ impl<'a> RawsockInterfaceSet {
         let ip_addrs = [
             self.ip.into(),
         ];
-        let iface = Some(EthernetInterfaceBuilder::new(device)
+        let iface = EthernetInterfaceBuilder::new(device)
                 .ethernet_addr(mac.clone())
                 .neighbor_cache(neighbor_cache)
                 .ip_addrs(ip_addrs)
-                .finalize());
+                .finalize();
 
         Ok(RawsockInterface {
             data_link,
@@ -114,6 +115,7 @@ impl<'a> RawsockInterfaceSet {
             iface,
             recv_thread: None,
             waker: Arc::new(Mutex::new(None)),
+            sockets: SocketSet::new(vec![])
         })
     }
 }
@@ -155,16 +157,12 @@ impl<'a> RawsockInterface<'a> {
     }
     pub async fn run(&mut self) {
         self.start_thread();
-        let mut sockets = SocketSet::new(vec![]);
+        let mut sockets = &mut self.sockets;
         let mut listening_socket_handle = sockets.add(new_listening_socket());
-        let mut iface = match self.iface.take() {
-            Some(iface) => iface,
-            None => return
-        };
         let waker = self.waker.clone();
         loop {
             match (PollSocket{
-                iface: &mut iface,
+                iface: &mut self.iface,
                 sockets: &mut sockets,
                 waker: &waker,
             }.await) {

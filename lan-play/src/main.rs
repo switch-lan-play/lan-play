@@ -15,11 +15,22 @@ use smoltcp::{
     socket::{TcpSocket, TcpSocketBuffer, SocketSet},
     wire::{Ipv4Cidr, Ipv4Address}
 };
+use rawsock::traits::Library;
+
+pub fn open_best_library() -> Result<Box<dyn Library>, rawsock::Error> {
+    if let Ok(l) = rawsock::wpcap::Library::open_default_paths() {
+        return Ok(Box::new(l));
+    }
+    match rawsock::pcap::Library::open_default_paths() {
+        Ok(l) => Ok(Box::new(l)),
+        Err(e) => Err(e)
+    }
+}
 
 async fn run_interfaces() {
     println!("Opening packet capturing library");
 
-    let lib = rawsock::open_best_library().expect("Can't open any library");
+    let lib = open_best_library().expect("Can't open any library");
     let set = RawsockInterfaceSet::new(lib,
         Ipv4Cidr::new(Ipv4Address::new(10, 13, 37, 2), 16),
     ).expect("Could not open any packet capturing library");
