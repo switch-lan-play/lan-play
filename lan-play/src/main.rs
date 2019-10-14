@@ -1,5 +1,6 @@
 #[macro_use] extern crate cfg_if;
 #[macro_use] extern crate futures;
+#[macro_use] extern crate lazy_static;
 
 mod rawsock_socket;
 mod interface_info;
@@ -17,6 +18,13 @@ use smoltcp::{
 };
 use rawsock::traits::Library;
 
+lazy_static! {
+    static ref RAWSOCK_LIB: Box<dyn Library> = {
+        open_best_library().expect("Can't open any library")
+        println!("Library opened, version is {}", set.lib_version());
+    };
+}
+
 pub fn open_best_library() -> Result<Box<dyn Library>, rawsock::Error> {
     if let Ok(l) = rawsock::wpcap::Library::open_default_paths() {
         return Ok(Box::new(l));
@@ -28,13 +36,10 @@ pub fn open_best_library() -> Result<Box<dyn Library>, rawsock::Error> {
 }
 
 async fn run_interfaces() {
-    println!("Opening packet capturing library");
-
-    let lib = open_best_library().expect("Can't open any library");
-    let set = RawsockInterfaceSet::new(lib,
+    let set = RawsockInterfaceSet::new(&RAWSOCK_LIB,
         Ipv4Cidr::new(Ipv4Address::new(10, 13, 37, 2), 16),
     ).expect("Could not open any packet capturing library");
-    println!("Library opened, version is {}", set.lib_version());
+
     let (mut opened, errored) = set.open_all_interface();
 
     for ErrorWithDesc(err, desc) in errored {

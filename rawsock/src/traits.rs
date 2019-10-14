@@ -6,7 +6,7 @@ use crate::{BorrowedPacket, DataLink, LibraryVersion, Error, InterfaceDescriptio
 use std::iter::IntoIterator;
 use std::sync::Arc;
 use std::ffi::{CStr, CString};
-
+use std::time::Duration;
 
 ///Trait for structures representing an opened interface (or network card or network device)
 ///
@@ -50,10 +50,10 @@ pub trait DynamicInterface<'a>: Send + Sync{
     ///Remove bpf filter.
     fn remove_filter(&mut self) -> Result<(), Error>;
 
-    //TODO
-    //bpf filters
-    //receive/send with timeout
+    // fn receive_timeout<'b>(&'b mut self, timeout: Duration) -> Result<BorrowedPacket<'b>, Error>;
 
+    //TODO
+    //receive/send with timeout
 }
 
 /**

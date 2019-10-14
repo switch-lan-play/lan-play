@@ -18,24 +18,25 @@ use super::device::{ChannelDevice, Packet};
 use std::future::Future;
 use std::pin::Pin;
 use std::task::{Context, Poll, Waker};
+use std::marker::PhantomData;
 
 use smoltcp::{
     socket::{TcpSocket, TcpSocketBuffer},
 };
 
 pub struct RawsockInterfaceSet {
-    lib: Box<dyn Library>,
+    lib: &'static Box<dyn Library>,
     all_interf: Vec<rawsock::InterfaceDescription>,
     ip: Ipv4Cidr,
     filter: CString,
 }
 
-pub struct RawsockInterface<'a> {
+pub struct RawsockInterface {
     pub desc: InterfaceDescription,
     mac: EthernetAddress,
     data_link: rawsock::DataLink,
 
-    interface: Arc<dyn DynamicInterface<'a> + 'a>,
+    interface: Arc<dyn DynamicInterface<'static> + 'static>,
     iface: EthernetInterface<'static, 'static, 'static, ChannelDevice>,
     sockets: SocketSet<'static, 'static, 'static>,
 
@@ -45,8 +46,8 @@ pub struct RawsockInterface<'a> {
     waker: Arc<Mutex<Option<Waker>>>,
 }
 
-impl<'a> RawsockInterfaceSet {
-    pub fn new(lib: Box<dyn Library>, ip: Ipv4Cidr) -> Result<RawsockInterfaceSet, rawsock::Error> {
+impl RawsockInterfaceSet {
+    pub fn new(lib: &'static Box<dyn Library>, ip: Ipv4Cidr) -> Result<RawsockInterfaceSet, rawsock::Error> {
         let all_interf = lib.all_interfaces()?;
         let filter = format!("net {}", ip.network());
         debug!("filter: {}", filter);
