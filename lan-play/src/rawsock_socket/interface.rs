@@ -190,9 +190,8 @@ impl RawsockInterface {
         if let Some(_) = self.recv_thread {
             return
         }
-        let static_self = unsafe{hide_lt(self)};
-        let interf = static_self.interface.clone();
-        let waker = static_self.waker.clone();
+        let interf = self.interface.clone();
+        let waker = self.waker.clone();
         let sender = self.port.clone_sender();
         self.recv_thread = Some(spawn(move || {
             let r = interf.loop_infinite_dyn(&|packet| {
@@ -220,9 +219,4 @@ fn new_listening_socket() -> TcpSocket<'static> {
     listening_socket.set_accept_all(true);
     listening_socket.listen(1).unwrap();
     listening_socket
-}
-
-unsafe fn hide_lt(v: &mut (RawsockInterface)) -> &mut (RawsockInterface) {
-    use std::mem;
-    mem::transmute(v)
 }
