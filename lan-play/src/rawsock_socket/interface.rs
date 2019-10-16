@@ -142,7 +142,7 @@ impl Future for PollSocket<'_, '_, '_> {
     }
 }
 
-impl<'a> RawsockInterface<'a> {
+impl RawsockInterface {
     pub fn name(&self) -> &String {
         &self.desc.name
     }
@@ -191,9 +191,9 @@ impl<'a> RawsockInterface<'a> {
             return
         }
         let static_self = unsafe{hide_lt(self)};
-        let sender = self.port.clone_sender();
         let interf = static_self.interface.clone();
         let waker = static_self.waker.clone();
+        let sender = self.port.clone_sender();
         self.recv_thread = Some(spawn(move || {
             let r = interf.loop_infinite_dyn(&|packet| {
                 if let Some(waker) = waker.lock().unwrap().take() {
@@ -212,7 +212,7 @@ impl<'a> RawsockInterface<'a> {
     }
 }
 
-fn new_listening_socket<'a>() -> TcpSocket<'a> {
+fn new_listening_socket() -> TcpSocket<'static> {
     let mut listening_socket = TcpSocket::new(
         TcpSocketBuffer::new(vec![0; 2048]),
         TcpSocketBuffer::new(vec![0; 2048])
@@ -222,7 +222,7 @@ fn new_listening_socket<'a>() -> TcpSocket<'a> {
     listening_socket
 }
 
-unsafe fn hide_lt<'a>(v: &mut (RawsockInterface<'a>)) -> &'a mut (RawsockInterface<'static>) {
+unsafe fn hide_lt(v: &mut (RawsockInterface)) -> &mut (RawsockInterface) {
     use std::mem;
     mem::transmute(v)
 }

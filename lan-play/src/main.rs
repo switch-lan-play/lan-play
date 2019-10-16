@@ -20,8 +20,9 @@ use rawsock::traits::Library;
 
 lazy_static! {
     static ref RAWSOCK_LIB: Box<dyn Library> = {
-        open_best_library().expect("Can't open any library")
-        println!("Library opened, version is {}", set.lib_version());
+        let lib = open_best_library().expect("Can't open any library");
+        println!("Library opened, version is {}", lib.version());
+        lib
     };
 }
 
