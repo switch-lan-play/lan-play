@@ -24,7 +24,7 @@ pub struct RawRxToken(Packet);
 
 impl RxToken for RawRxToken {
     fn consume<R, F>(mut self, _timestamp: Instant, f: F) -> smoltcp::Result<R>
-        where F: (FnOnce(&mut [u8]) -> smoltcp::Result<R>)
+        where F: FnOnce(&mut [u8]) -> smoltcp::Result<R>
     {
         let p = &mut self.0;
         let result = f(p);

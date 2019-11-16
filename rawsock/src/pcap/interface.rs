@@ -3,7 +3,7 @@ use crate::{Error,  BorrowedPacket, DataLink, traits, Stats};
 use super::dll::{PCapHandle, PCapDll, PCapPacketHeader};
 use super::dll::helpers::PCapErrBuf;
 use super::structs::PCapStat;
-use libc::{c_int, c_ulong, ioctl};
+use libc::{c_int, c_ulong};
 use std::mem::{uninitialized, transmute};
 use crate::utils::cstr_to_string;
 use std::sync::Mutex;
@@ -92,17 +92,18 @@ impl<'a> Interface<'a> {
                 if (fd == -1) {
                     return Err(Error::LibraryError("fileno"));
                 }
-                if 0 == ioctl(fd, libc::BIOCIMMEDIATE, &on as * const c_int) {
+                if 0 == libc::ioctl(fd, libc::BIOCIMMEDIATE, &on as * const c_int) {
                     Ok(())
                 } else {
                     Err(Error::LibraryError("ioctl"))
                 }
             }
-            #[cfg(target_os = "linux")]
-            {
-                // libpcap < 1.5.0 is always on immediate mode
-                Ok(())
-            }
+            // #[cfg(target_os = "linux")]
+            // {
+            //     // libpcap < 1.5.0 is always on immediate mode
+            //     Ok(())
+            // }
+            Ok(())
         }
     }
 }

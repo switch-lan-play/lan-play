@@ -6,7 +6,6 @@ mod rawsock_socket;
 mod interface_info;
 mod channel_port;
 
-use tokio::net::signal;
 use futures::{StreamExt, future};
 use std::future::Future;
 use futures::future::{join_all, join};
@@ -100,11 +99,8 @@ async fn run_interfaces() {
     // });
 }
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn main() {
     env_logger::init();
 
-    run_interfaces().await;
-
-    Ok(())
+    async_std::task::block_on(run_interfaces());
 }
