@@ -120,13 +120,13 @@ impl RawsockInterfaceSet {
     }
 }
 
-struct PollSocket<'a, 'b: 'a, 'c: 'a> {
-    iface: &'a mut EthernetInterface<'b, 'b, 'b, ChannelDevice>,
-    sockets: &'a mut SocketSet<'c, 'c, 'c>,
+struct PollSocket<'a> {
+    iface: &'a mut EthernetInterface<'static, 'static, 'static, ChannelDevice>,
+    sockets: &'a mut SocketSet<'static, 'static, 'static>,
     waker: &'a Arc<Mutex<Option<Waker>>>,
 }
 
-impl Future for PollSocket<'_, '_, '_> {
+impl Future for PollSocket<'_> {
     type Output = smoltcp::Result<()>;
     fn poll(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
         let this = self.get_mut();
@@ -154,18 +154,13 @@ impl RawsockInterface {
     }
     pub async fn run(&mut self) {
         self.start_thread();
-        let mut sockets = &mut self.sockets;
-        let mut listening_socket_handle = sockets.add(new_listening_socket());
-        let waker = self.waker.clone();
+        let mut listening_socket_handle = self.sockets.add(new_listening_socket());
         loop {
-            match (PollSocket{
-                iface: &mut self.iface,
-                sockets: &mut sockets,
-                waker: &waker,
-            }.await) {
+            match self.poll_socket().await {
                 Ok(_) => (),
                 Err(_) => (),
             };
+            let sockets = &mut self.sockets;
             while let Ok(data) = self.port.try_recv() {
                 let _ = self.interface.send(&data);
             }
@@ -183,6 +178,13 @@ impl RawsockInterface {
                 sockets.prune();
                 debug!("size {}", sockets.iter().count());
             }
+        }
+    }
+    fn poll_socket(&mut self) -> PollSocket {
+        PollSocket{
+            iface: &mut self.iface,
+            sockets: &mut self.sockets,
+            waker: &self.waker,
         }
     }
     fn start_thread(&mut self) {
