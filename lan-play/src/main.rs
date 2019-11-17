@@ -16,7 +16,7 @@ use smoltcp::{
     wire::{Ipv4Cidr, Ipv4Address}
 };
 use rawsock::traits::Library;
-use async_std::task;
+use async_std::task::{self, JoinHandle};
 
 lazy_static! {
     static ref RAWSOCK_LIB: Box<dyn Library> = {
@@ -41,21 +41,18 @@ async fn run_interfaces() {
         Ipv4Cidr::new(Ipv4Address::new(10, 13, 37, 2), 16),
     ).expect("Could not open any packet capturing library");
 
-    let (opened, errored) = set.open_all_interface();
+    let (mut opened, errored) = set.open_all_interface();
 
     for ErrorWithDesc(err, desc) in errored {
         log::warn!("Err: Interface {:?} ({:?}) err {:?}", desc.name, desc.description, err);
     }
 
-    let handles: Vec<_> = opened.into_iter().map(|mut interface| {
+    for interface in &opened {
         println!("Interface {} ({}) opened, mac: {}, data link: {}", interface.name(), interface.desc.description, interface.mac(), interface.data_link());
-        task::spawn(async move {
-            interface.run().await;
-        })
-    }).collect();
+    }
 
-    for h in handles {
-        h.await;
+    for interface in &mut opened {
+        (&mut interface.running).await;
     }
 }
 
