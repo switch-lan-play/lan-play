@@ -24,10 +24,13 @@ impl<S: Stream + Unpin, O: Sink<Packet> + Unpin> Future for NewFuture<S, O> {
         cx: &mut Context<'_>,
     ) -> Poll<Self::Output> {
         let s = self.get_mut().0.take().unwrap();
+        let mut caps = DeviceCapabilities::default();
+        caps.max_transmission_unit = 1536;
+        caps.max_burst_size = Some(1);
         Poll::Ready(FutureDevice {
             inner: Arc::new(Mutex::new(s)),
-            cap: DeviceCapabilities::default(),
-            waker: cx.waker().clone()
+            waker: cx.waker().clone(),
+            caps,
         })
     }
 }
@@ -39,7 +42,7 @@ struct Inner<S: Stream, O: Sink<Packet>> {
 type InnerType<S, O> = Arc<Mutex<Inner<S, O>>>;
 pub struct FutureDevice<S: Stream, O: Sink<Packet>> {
     inner: InnerType<S, O>,
-    cap: DeviceCapabilities,
+    caps: DeviceCapabilities,
     waker: Waker,
 }
 
@@ -77,7 +80,9 @@ impl<'a, S: Stream, O: Sink<Packet> + Unpin> TxToken for FutureTxToken<S, O> {
         if result.is_ok() {
             let mut s = self.0.lock().unwrap();
             task::block_on(async {
-                s.output.send(buffer).await;
+                if s.output.send(buffer).await.is_err() {
+                    log::warn!("send error");
+                }
             });
         }
         result
@@ -110,9 +115,6 @@ where
     }
 
     fn capabilities(&self) -> DeviceCapabilities {
-        let mut caps = DeviceCapabilities::default();
-        caps.max_transmission_unit = 1536;
-        caps.max_burst_size = Some(1);
-        caps
+        self.caps.clone()
     }
 }
