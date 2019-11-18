@@ -4,7 +4,6 @@
 
 mod rawsock_socket;
 mod interface_info;
-mod channel_port;
 
 use futures::{StreamExt, future};
 use std::future::Future;
@@ -42,6 +41,10 @@ async fn run_interfaces() {
     ).expect("Could not open any packet capturing library");
 
     let (mut opened, errored) = set.open_all_interface();
+
+    if opened.len() == 0 {
+        return println!("No interface can be opened");
+    }
 
     for ErrorWithDesc(err, desc) in errored {
         log::warn!("Err: Interface {:?} ({:?}) err {:?}", desc.name, desc.description, err);
