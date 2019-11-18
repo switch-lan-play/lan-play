@@ -9,7 +9,7 @@ use smoltcp::{
 };
 use std::collections::BTreeMap;
 use std::thread;
-use super::future_device::{FutureDevice, Packet};
+use super::device::{FutureDevice, Packet, AsyncIface};
 use log::{warn, debug};
 use super::{Error, ErrorWithDesc};
 use std::ffi::CString;
@@ -175,7 +175,7 @@ impl RawsockInterface {
             {
                 let mut sockets = sockets.write().await;
                 select! {
-                    _ = poll_socket(&mut iface, &mut sockets).fuse() => {
+                    _ = iface.poll_async(&mut sockets).fuse() => {
                         //
                     },
                     dat = packet_receiver.next().fuse() => {

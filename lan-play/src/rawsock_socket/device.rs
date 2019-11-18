@@ -1,4 +1,4 @@
-use smoltcp::phy::{DeviceCapabilities,RxToken,TxToken};
+use smoltcp::phy::{Device, DeviceCapabilities,RxToken,TxToken};
 use smoltcp::{
     iface::{EthernetInterfaceBuilder, NeighborCache, EthernetInterface},
     wire::{IpCidr, EthernetAddress},
@@ -52,6 +52,9 @@ impl<S: Stream + Unpin, O: Sink<Packet> + Unpin> FutureDevice<S, O> {
             stream,
             output,
         }))
+    }
+    fn set_waker(&mut self, waker: Waker) {
+        self.waker = waker;
     }
 }
 
@@ -116,5 +119,53 @@ where
 
     fn capabilities(&self) -> DeviceCapabilities {
         self.caps.clone()
+    }
+}
+
+pub struct PollAsync<'a, 'b, 'c, 'e, S, O>
+where
+    S: Stream<Item=Packet> + Unpin + 'static,
+    O: Sink<Packet> + Unpin + 'static,
+{
+    iface: &'a mut EthernetInterface<'b, 'c, 'e, FutureDevice<S, O>>,
+    sockets: &'a mut SocketSet<'static, 'static, 'static>,
+}
+
+impl<'a, 'b, 'c, 'e, S, O> Future for PollAsync<'a, 'b, 'c, 'e, S, O>
+where
+    S: Stream<Item=Packet> + Unpin + 'static,
+    O: Sink<Packet> + Unpin + 'static,
+{
+    type Output = smoltcp::Result<()>;
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let this = self.get_mut();
+        this.iface.device_mut().set_waker(cx.waker().clone());
+        let timestamp = Instant::now();
+        let ret = match this.iface.poll(&mut this.sockets, timestamp) {
+            Ok(true) => Poll::Ready(Ok(())),
+            Ok(false) => Poll::Pending,
+            Err(e) => Poll::Ready(Err(e)),
+        };
+        ret
+    }
+}
+
+pub trait AsyncIface<'b, 'c, 'e, S, O> {
+    fn poll_async<'a>(&'a mut self, sockets: &'a mut SocketSet<'static, 'static, 'static>) -> PollAsync<'a, 'b, 'c, 'e, S, O>
+    where
+        S: Stream<Item=Packet> + Unpin + 'static,
+        O: Sink<Packet> + Unpin + 'static;
+}
+
+impl<'b, 'c, 'e, S, O> AsyncIface<'b, 'c, 'e, S, O> for EthernetInterface<'b, 'c, 'e, FutureDevice<S, O>>
+where
+    S: Stream<Item=Packet> + Unpin + 'static,
+    O: Sink<Packet> + Unpin + 'static,
+{
+    fn poll_async<'a>(&'a mut self, sockets: &'a mut SocketSet<'static, 'static, 'static>) -> PollAsync<'a, 'b, 'c, 'e, S, O> {
+        PollAsync {
+            iface: self,
+            sockets,
+        }
     }
 }
