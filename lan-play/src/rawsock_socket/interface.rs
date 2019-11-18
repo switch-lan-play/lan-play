@@ -75,34 +75,6 @@ impl RawsockInterfaceSet {
     }
 }
 
-struct PollSocket<'a> {
-    iface: &'a mut IFace,
-    sockets: &'a mut SocketSet<'static, 'static, 'static>,
-}
-
-impl Future for PollSocket<'_> {
-    type Output = smoltcp::Result<()>;
-    fn poll(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
-        let this = self.get_mut();
-        // let mut waker = this.waker.lock().unwrap();
-        // waker.replace(cx.waker().clone());
-        let timestamp = Instant::now();
-        let ret = match this.iface.poll(&mut this.sockets, timestamp) {
-            Ok(true) => Poll::Ready(Ok(())),
-            Ok(false) => Poll::Pending,
-            Err(e) => Poll::Ready(Err(e)),
-        };
-        ret
-    }
-}
-
-fn poll_socket<'a>(iface: &'a mut IFace, sockets: &'a mut SocketSet<'static, 'static, 'static>) -> PollSocket<'a> {
-    PollSocket{
-        iface,
-        sockets,
-    }
-}
-
 impl RawsockInterface {
     fn new(slf: &RawsockInterfaceSet, desc: &mut InterfaceDescription) -> Result<RawsockInterface, Error> {
         let name = &desc.name;
