@@ -90,20 +90,23 @@ impl<'a> Interface<'a> {
                 let fd = self.dll.pcap_fileno(self.handle);
                 let on: c_int = 1;
                 if (fd == -1) {
-                    return Err(Error::LibraryError("fileno"));
+                    return Err(Error::LibraryError("fileno".to_string()));
                 }
                 if 0 == libc::ioctl(fd, libc::BIOCIMMEDIATE, &on as * const c_int) {
                     Ok(())
                 } else {
-                    Err(Error::LibraryError("ioctl"))
+                    Err(Error::LibraryError("ioctl".to_string()))
                 }
             }
-            // #[cfg(target_os = "linux")]
-            // {
-            //     // libpcap < 1.5.0 is always on immediate mode
-            //     Ok(())
-            // }
-            Ok(())
+            #[cfg(target_os = "linux")]
+            {
+                // libpcap < 1.5.0 is always on immediate mode
+                Ok(())
+            }
+            #[cfg(target_os = "windows")]
+            {
+                unreachable!()
+            }
         }
     }
 }
