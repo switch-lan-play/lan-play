@@ -1,9 +1,13 @@
 #[macro_use] extern crate cfg_if;
 #[macro_use] extern crate futures;
 #[macro_use] extern crate lazy_static;
+#[macro_use] extern crate async_trait;
 
 mod rawsock_socket;
 mod interface_info;
+mod proxy;
+mod lan_play;
+mod error;
 
 use futures::{StreamExt, future};
 use std::future::Future;
@@ -16,6 +20,9 @@ use smoltcp::{
 };
 use rawsock::traits::Library;
 use async_std::task::{self, JoinHandle};
+use lan_play::{LanPlayMain, LanPlay};
+use proxy::DirectProxy;
+use error::{Result, Error};
 
 lazy_static! {
     static ref RAWSOCK_LIB: Box<dyn Library> = {
@@ -25,17 +32,14 @@ lazy_static! {
     };
 }
 
-pub fn open_best_library() -> Result<Box<dyn Library>, rawsock::Error> {
+fn open_best_library() -> Result<Box<dyn Library>> {
     if let Ok(l) = rawsock::wpcap::Library::open_default_paths() {
         return Ok(Box::new(l));
     }
-    match rawsock::pcap::Library::open_default_paths() {
-        Ok(l) => Ok(Box::new(l)),
-        Err(e) => Err(e)
-    }
+    Ok(Box::new(rawsock::pcap::Library::open_default_paths()?))
 }
 
-async fn run_interfaces() {
+async fn async_main() -> Result<()> {
     let set = RawsockInterfaceSet::new(&RAWSOCK_LIB,
         Ipv4Cidr::new(Ipv4Address::new(10, 13, 37, 2), 16),
     ).expect("Could not open any packet capturing library");
@@ -43,7 +47,7 @@ async fn run_interfaces() {
     let (mut opened, errored) = set.open_all_interface();
 
     if opened.len() == 0 {
-        return println!("No interface can be opened");
+        return Err(Error::NoInterface)
     }
 
     for ErrorWithDesc(err, desc) in errored {
@@ -54,13 +58,19 @@ async fn run_interfaces() {
         println!("Interface {} ({}) opened, mac: {}, data link: {}", interface.name(), interface.desc.description, interface.mac(), interface.data_link());
     }
 
+    let mut lp = Box::new(LanPlay::new(DirectProxy::new()).await.unwrap());
+
+    lp.start().await?;
+
     for interface in &mut opened {
         (&mut interface.running).await;
     }
+
+    Ok(())
 }
 
 fn main() {
     env_logger::init();
 
-    task::block_on(run_interfaces());
+    task::block_on(async_main());
 }
