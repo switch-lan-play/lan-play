@@ -4,7 +4,7 @@ use rawsock::InterfaceDescription;
 use smoltcp::{
     iface::{EthernetInterfaceBuilder, NeighborCache, EthernetInterface},
     wire::{EthernetAddress, Ipv4Cidr},
-    socket::{SocketSet},
+    socket::{SocketSet, SocketHandle, AnySocket},
     time::{Instant},
 };
 use std::collections::BTreeMap;
@@ -26,53 +26,19 @@ use smoltcp::{
     socket::{TcpSocket, TcpSocketBuffer},
 };
 
-pub struct RawsockInterfaceSet {
-    lib: &'static Box<dyn Library>,
-    all_interf: Vec<rawsock::InterfaceDescription>,
-    ip: Ipv4Cidr,
-    filter: CString,
-}
-
 type Interface = std::sync::Arc<dyn DynamicInterface<'static> + 'static>;
 type DeviceType = FutureDevice<Receiver<Packet>, Sender<Packet>>;
-type SharedSockets = Arc<RwLock<SocketSet<'static, 'static, 'static>>>;
 type IFace = EthernetInterface<'static, 'static, 'static, DeviceType>;
+pub type SharedSockets = Arc<RwLock<SocketSet<'static, 'static, 'static>>>;
 pub struct RawsockInterface {
     pub desc: InterfaceDescription,
     mac: EthernetAddress,
     data_link: rawsock::DataLink,
 
     sockets: SharedSockets,
+    pulse_sender: Sender<()>,
 
     pub running: task::JoinHandle<()>,
-}
-
-impl RawsockInterfaceSet {
-    pub fn new(lib: &'static Box<dyn Library>, ip: Ipv4Cidr) -> Result<RawsockInterfaceSet, rawsock::Error> {
-        let all_interf = lib.all_interfaces()?;
-        let filter = format!("net {}", ip.network());
-        debug!("filter: {}", filter);
-        Ok(RawsockInterfaceSet {
-            lib,
-            all_interf,
-            ip,
-            filter: CString::new(filter)?,
-        })
-    }
-    pub fn open_all_interface(&self) -> (Vec<RawsockInterface>, Vec<ErrorWithDesc>) {
-        let all_interf = self.all_interf.clone();
-        let (opened, errored): (Vec<_>, _) = all_interf
-            .into_iter()
-            .map(|i| self.open_interface(i))
-            .partition(Result::is_ok);
-        (
-            opened.into_iter().map(Result::unwrap).collect::<Vec<_>>(),
-            errored.into_iter().map(|i| i.err().unwrap()).collect::<Vec<_>>()
-        )
-    }
-    fn open_interface(&self, mut desc: InterfaceDescription) -> Result<RawsockInterface, ErrorWithDesc> {
-        RawsockInterface::new(self, &mut desc).map_err(|err| { ErrorWithDesc(err, desc) })
-    }
 }
 
 impl RawsockInterface {
@@ -100,6 +66,7 @@ impl RawsockInterface {
         ];
         let (packet_sender, stream) = channel::<Packet>(2);
         let (sink, packet_receiver) = channel::<Packet>(2);
+        let (pulse_sender, pulse_receiver) = channel(1);
         let device = task::block_on(FutureDevice::new(stream, sink));
 
         let iface = EthernetInterfaceBuilder::new(device)
@@ -115,6 +82,7 @@ impl RawsockInterface {
             iface,
             sockets.clone(),
             packet_receiver,
+            pulse_receiver,
         ));
 
         Ok(RawsockInterface {
@@ -122,8 +90,12 @@ impl RawsockInterface {
             desc: desc.clone(),
             mac,
             sockets,
+            pulse_sender,
             running,
         })
+    }
+    pub fn clone_sockets(&self) -> SharedSockets {
+        self.sockets.clone()
     }
     pub fn name(&self) -> &String {
         &self.desc.name
@@ -139,10 +111,8 @@ impl RawsockInterface {
         mut iface: EthernetInterface<'static, 'static, 'static, DeviceType>,
         sockets: SharedSockets,
         mut packet_receiver: Receiver<Packet>,
+        mut pulse_receiver: Receiver<()>,
     ) {
-        let mut listening_socket_handle = {
-            sockets.write().await.add(new_listening_socket())
-        };
         loop {
             {
                 let mut sockets = sockets.write().await;
@@ -154,30 +124,18 @@ impl RawsockInterface {
                         if let Some(data) = dat {
                             let _ = interface.send(&data);
                         }
+                    },
+                    _ = pulse_receiver.next().fuse() => {
+                        drop(sockets);
+                        pulse_receiver.next().await;
+                        // just to do next loop
                     }
                 }
-            }
-            let mut need_new_listen = false;
-            {
-                let mut sockets = sockets.write().await;
-                let mut socket = sockets.get::<TcpSocket>(listening_socket_handle);
-                if socket.can_send() {
-                    need_new_listen = true;
-                    debug!("shit I get it");
-                    socket.close();
-                }
-            }
-            if need_new_listen {
-                let mut sockets = sockets.write().await;
-                listening_socket_handle = sockets.add(new_listening_socket());
-                sockets.prune();
-                debug!("size {}", sockets.iter().count());
             }
         }
     }
     fn start_thread(interface: Interface, mut packet_sender: Sender<Packet>) {
         debug!("recv thread start");
-        // let waker = self.waker.clone();
         thread::spawn(move || {
             let r = interface.loop_infinite_dyn(&|packet| {
                 match task::block_on(packet_sender.send(packet.as_owned().to_vec())) {
@@ -191,14 +149,66 @@ impl RawsockInterface {
             debug!("recv thread exit");
         });
     }
+    pub(super) async fn borrow_socket<T, F, R>(&self, handle: SocketHandle, f: F) -> R
+    where
+        T: AnySocket<'static, 'static>,
+        F: FnOnce(&mut T) -> R
+    {
+        self.insert_loop(async {
+            let mut sockets = self.sockets.write().await;
+            let mut socket = sockets.get::<T>(handle);
+            f(&mut socket)
+        }).await
+    }
+    pub(super) async fn new_socket(&self) -> SocketHandle {
+        self.insert_loop(async {
+            let mut sockets = self.sockets.write().await;
+            let socket = TcpSocket::new(
+                TcpSocketBuffer::new(vec![0; 2048]),
+                TcpSocketBuffer::new(vec![0; 2048])
+            );
+            sockets.add(socket)
+        }).await
+    }
+    async fn insert_loop<R, F: Future<Output=R>>(&self, future: F) -> R {
+        let mut sender = self.pulse_sender.clone();
+        sender.send(()).await.unwrap();
+        let ret = future.await;
+        sender.send(()).await.unwrap();
+        ret
+    }
 }
 
-fn new_listening_socket() -> TcpSocket<'static> {
-    let mut listening_socket = TcpSocket::new(
-        TcpSocketBuffer::new(vec![0; 2048]),
-        TcpSocketBuffer::new(vec![0; 2048])
-    );
-    listening_socket.set_accept_all(true);
-    listening_socket.listen(1).unwrap();
-    listening_socket
+pub struct RawsockInterfaceSet {
+    lib: &'static Box<dyn Library>,
+    all_interf: Vec<rawsock::InterfaceDescription>,
+    ip: Ipv4Cidr,
+    filter: CString,
+}
+impl RawsockInterfaceSet {
+    pub fn new(lib: &'static Box<dyn Library>, ip: Ipv4Cidr) -> Result<RawsockInterfaceSet, rawsock::Error> {
+        let all_interf = lib.all_interfaces()?;
+        let filter = format!("net {}", ip.network());
+        debug!("filter: {}", filter);
+        Ok(RawsockInterfaceSet {
+            lib,
+            all_interf,
+            ip,
+            filter: CString::new(filter)?,
+        })
+    }
+    pub fn open_all_interface(&self) -> (Vec<RawsockInterface>, Vec<ErrorWithDesc>) {
+        let all_interf = self.all_interf.clone();
+        let (opened, errored): (Vec<_>, _) = all_interf
+            .into_iter()
+            .map(|i| self.open_interface(i))
+            .partition(Result::is_ok);
+        (
+            opened.into_iter().map(Result::unwrap).collect::<Vec<_>>(),
+            errored.into_iter().map(|i| i.err().unwrap()).collect::<Vec<_>>()
+        )
+    }
+    fn open_interface(&self, mut desc: InterfaceDescription) -> Result<RawsockInterface, ErrorWithDesc> {
+        RawsockInterface::new(self, &mut desc).map_err(|err| { ErrorWithDesc(err, desc) })
+    }
 }
