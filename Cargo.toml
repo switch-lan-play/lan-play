@@ -5,8 +5,8 @@ members = [
   "rawsock",
 ]
 
-[patch.'https://github.com/switch-lan-play/smoltcp.git'.smoltcp]
-path = '../smoltcp'
+# [patch.'https://github.com/switch-lan-play/smoltcp.git'.smoltcp]
+# path = '../smoltcp'
 
 [profile.release]
 opt-level = "z"
