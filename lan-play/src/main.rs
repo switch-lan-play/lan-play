@@ -44,27 +44,9 @@ async fn async_main() -> Result<()> {
         Ipv4Cidr::new(Ipv4Address::new(10, 13, 37, 2), 16),
     ).expect("Could not open any packet capturing library");
 
-    let (mut opened, errored) = set.open_all_interface();
-
-    if opened.len() == 0 {
-        return Err(Error::NoInterface)
-    }
-
-    for ErrorWithDesc(err, desc) in errored {
-        log::warn!("Err: Interface {:?} ({:?}) err {:?}", desc.name, desc.description, err);
-    }
-
-    for interface in &opened {
-        println!("Interface {} ({}) opened, mac: {}, data link: {}", interface.name(), interface.desc.description, interface.mac(), interface.data_link());
-    }
-
     let mut lp = Box::new(LanPlay::new(DirectProxy::new()).await.unwrap());
 
-    lp.start().await?;
-
-    for interface in &mut opened {
-        (&mut interface.running).await;
-    }
+    lp.start(&set).await?;
 
     Ok(())
 }
@@ -72,5 +54,5 @@ async fn async_main() -> Result<()> {
 fn main() {
     env_logger::init();
 
-    task::block_on(async_main());
+    task::block_on(async_main()).unwrap();
 }
