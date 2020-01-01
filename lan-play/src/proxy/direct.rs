@@ -1,7 +1,7 @@
-use super::{Proxy, socket, SocketAddr, ToSocketAddrs};
-use async_std::task::{self, JoinHandle};
-use async_std::net::{TcpStream, UdpSocket};
-use async_std::io;
+use super::{Proxy, socket, ToSocketAddrs, SocketAddr};
+use tokio::task::{self, JoinHandle};
+use tokio::net::{TcpStream, UdpSocket};
+use tokio::io;
 
 #[async_trait(?Send)]
 impl socket::Tcp for TcpStream {
@@ -10,10 +10,10 @@ impl socket::Tcp for TcpStream {
 
 #[async_trait(?Send)]
 impl socket::Udp for UdpSocket {
-    async fn send_to<A: ToSocketAddrs>(&self, buf: &[u8], addrs: A) -> io::Result<usize> {
+    async fn send_to<A: ToSocketAddrs>(&mut self, buf: &[u8], addrs: A) -> io::Result<usize> {
         UdpSocket::send_to(self, buf, addrs).await
     }
-    async fn recv_from(&self, buf: &mut [u8]) -> io::Result<(usize, SocketAddr)> {
+    async fn recv_from(&mut self, buf: &mut [u8]) -> io::Result<(usize, SocketAddr)> {
         UdpSocket::recv_from(self, buf).await
     }
 }
@@ -47,7 +47,7 @@ impl Proxy for DirectProxy {
         UdpSocket::bind(addrs).await
     }
     async fn join(&mut self) -> () {
-        (&mut self.join).await
+        (&mut self.join).await.unwrap()
     }
 }
 

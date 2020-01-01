@@ -7,11 +7,11 @@ use smoltcp::{
 };
 use futures::stream::Stream;
 use futures::sink::{Sink, SinkExt};
+use futures::executor::block_on;
 use std::sync::{Arc, Mutex};
 use std::pin::Pin;
 use std::future::Future;
 use std::task::{Context, Poll, Waker};
-use async_std::task;
 
 pub type Packet = Vec<u8>;
 
@@ -82,7 +82,7 @@ impl<'a, S: Stream, O: Sink<Packet> + Unpin> TxToken for FutureTxToken<S, O> {
         let result = f(&mut buffer);
         if result.is_ok() {
             let mut s = self.0.lock().unwrap();
-            task::block_on(async {
+            block_on(async {
                 if s.output.send(buffer).await.is_err() {
                     log::warn!("send error");
                 }

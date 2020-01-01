@@ -1,7 +1,7 @@
 use crate::proxy::Proxy;
 use crate::error::{Error, Result};
-use crate::rawsock_socket::{RawsockInterface, ErrorWithDesc, RawsockInterfaceSet};
-use async_std::task;
+use crate::rawsock_socket::{ErrorWithDesc, RawsockInterfaceSet};
+use tokio::task;
 
 pub struct LanPlay<P> {
     proxy: P,
@@ -44,7 +44,7 @@ impl<P> LanPlayMain for LanPlay<P> {
         let mut handles: Vec<task::JoinHandle<()>> = vec![];
         for mut interface in opened {
             handles.push(task::spawn(async move {
-                (&mut interface.running).await;
+                (&mut interface.running).await.unwrap();
             }));
         }
     

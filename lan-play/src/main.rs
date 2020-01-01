@@ -9,20 +9,14 @@ mod proxy;
 mod lan_play;
 mod error;
 
-use futures::{StreamExt, future};
-use std::future::Future;
-use futures::future::{join_all, join};
-use rawsock_socket::{ErrorWithDesc, RawsockInterfaceSet};
+use rawsock_socket::RawsockInterfaceSet;
 use smoltcp::{
-    iface::{EthernetInterfaceBuilder},
-    socket::{TcpSocket, TcpSocketBuffer, SocketSet},
     wire::{Ipv4Cidr, Ipv4Address}
 };
 use rawsock::traits::Library;
-use async_std::task::{self, JoinHandle};
-use lan_play::{LanPlayMain, LanPlay};
+use lan_play::LanPlay;
 use proxy::DirectProxy;
-use error::{Result, Error};
+use error::Result;
 
 lazy_static! {
     static ref RAWSOCK_LIB: Box<dyn Library> = {
@@ -51,8 +45,9 @@ async fn async_main() -> Result<()> {
     Ok(())
 }
 
-fn main() {
+#[tokio::main]
+async fn main() -> Result<()> {
     env_logger::init();
 
-    task::block_on(async_main()).unwrap();
+    async_main().await
 }

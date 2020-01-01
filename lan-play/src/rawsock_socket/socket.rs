@@ -2,26 +2,21 @@ use smoltcp::{
     socket::{TcpSocket, TcpSocketBuffer, SocketSet, SocketHandle},
     wire::{IpCidr, IpAddress}
 };
-use super::interface::{RawsockInterface, SharedSockets};
-use async_std::sync::{Arc, RwLock};
+use super::interface::{RawsockInterface};
 
 pub struct TcpListener {
-    handle: SocketHandle
+    handle: Option<SocketHandle>,
 }
 
 impl<'a> TcpListener {
     pub async fn new(interf: &RawsockInterface) -> TcpListener {
-        let handle = interf.new_socket().await;
-        interf.borrow_socket::<TcpSocket, _, _>(handle, |socket| {
-            socket.set_accept_all(true);
-        }).await;
         TcpListener {
-            handle
+            handle: None
         }
     }
     pub async fn next(&mut self) -> Socket {
         Socket {
-            handle: self.handle
+            handle: self.handle.unwrap()
         }
     }
 }
