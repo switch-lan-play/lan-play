@@ -2,33 +2,48 @@ use smoltcp::{
     socket::{TcpSocket, TcpSocketBuffer, SocketSet, SocketHandle},
     wire::{IpCidr, IpAddress}
 };
-use super::interface::{RawsockInterface, SharedSockets};
+use super::interface::{RawsockInterface};
 use async_std::sync::{Arc, RwLock};
+use futures::channel::{mpsc, oneshot};
+use futures::prelude::*;
+use super::event::Event;
+use super::Result;
 
-pub struct TcpListener {
-    handle: SocketHandle
+#[derive(Debug)]
+pub(super) struct AsyncSocket {
+    pub handle: SocketHandle,
+    pub can_read: mpsc::Receiver<()>,
+    pub can_write: mpsc::Receiver<()>,
 }
 
-impl<'a> TcpListener {
-    pub async fn new(interf: &RawsockInterface) -> TcpListener {
-        let handle = interf.new_socket().await;
-        interf.borrow_socket::<TcpSocket, _, _>(handle, |socket| {
-            socket.set_accept_all(true);
-        }).await;
-        TcpListener {
-            handle
-        }
+pub struct TcpListener<'a> {
+    handle: AsyncSocket,
+    interf: &'a RawsockInterface,
+}
+
+impl<'a> TcpListener<'a> {
+    pub async fn new(interf: &'a RawsockInterface) -> Result<TcpListener<'a>> {
+        let (s, r) = oneshot::channel::<AsyncSocket>();
+        interf.send_event(Event::NewSocket(s)).await?;
+        let s = r.await?;
+        Ok(TcpListener {
+            handle: s,
+            interf
+        })
     }
-    pub async fn next(&mut self) -> Socket {
-        Socket {
-            handle: self.handle
-        }
+    pub async fn next(&mut self) -> Result<Option<Socket>> {
+        self.handle.can_read.next().await;
+        let next = Self::new(self.interf).await?;
+        let handle = std::mem::replace(&mut self.handle, next.handle);
+        Ok(Some(Socket {
+            handle
+        }))
     }
 }
 
 
 pub struct Socket {
-    handle: SocketHandle
+    handle: AsyncSocket
 }
 impl Socket {
     fn new(interf: &mut RawsockInterface) {

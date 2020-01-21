@@ -1,6 +1,11 @@
 use crate::proxy::Proxy;
 use crate::error::{Error, Result};
-use crate::rawsock_socket::{RawsockInterface, ErrorWithDesc, RawsockInterfaceSet};
+use crate::rawsock_socket::{
+    RawsockInterface,
+    ErrorWithDesc,
+    RawsockInterfaceSet,
+    TcpListener
+};
 use async_std::task;
 
 pub struct LanPlay<P> {
@@ -24,6 +29,17 @@ where
     }
 }
 
+
+async fn process_interface(mut interf: RawsockInterface) {
+    // {
+    //     let mut tcp_listener = TcpListener::new(&mut interf).await.unwrap();
+    //     while let Ok(Some(socket)) = tcp_listener.next().await {
+    //         println!("new connection");
+    //     }
+    // }
+    (&mut interf.running).await;
+}
+
 #[async_trait(?Send)]
 impl<P> LanPlayMain for LanPlay<P> {
     async fn start(&mut self, set: &RawsockInterfaceSet) -> Result<()> {
@@ -42,10 +58,12 @@ impl<P> LanPlayMain for LanPlay<P> {
         }
     
         let mut handles: Vec<task::JoinHandle<()>> = vec![];
-        for mut interface in opened {
-            handles.push(task::spawn(async move {
-                (&mut interface.running).await;
-            }));
+        for interface in opened {
+            handles.push(task::spawn(process_interface(interface)));
+        }
+
+        for t in handles {
+            t.await;
         }
     
         Ok(())

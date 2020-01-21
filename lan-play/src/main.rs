@@ -1,3 +1,4 @@
+#![recursion_limit="256"]
 #[macro_use] extern crate cfg_if;
 #[macro_use] extern crate futures;
 #[macro_use] extern crate lazy_static;

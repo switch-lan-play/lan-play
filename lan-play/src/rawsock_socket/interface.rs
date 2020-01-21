@@ -5,7 +5,6 @@ use smoltcp::{
     iface::{EthernetInterfaceBuilder, NeighborCache, EthernetInterface},
     wire::{EthernetAddress, Ipv4Cidr},
     socket::{SocketSet, SocketHandle, AnySocket},
-    time::{Instant},
 };
 use std::collections::BTreeMap;
 use std::thread;
@@ -14,35 +13,70 @@ use log::{warn, debug};
 use super::{Error, ErrorWithDesc};
 use std::ffi::CString;
 use std::future::Future;
-use std::pin::Pin;
-use std::task::{Context, Poll};
 use futures::channel::mpsc::{channel, Sender, Receiver};
 use async_std::task;
 use futures::select;
 use futures::prelude::*;
-use async_std::sync::{Arc, RwLock};
-
+use async_std::sync::{Arc, RwLock, Mutex};
+use super::socket::AsyncSocket;
+use super::event::Event;
+use super::net::Net;
 use smoltcp::{
     socket::{TcpSocket, TcpSocketBuffer},
 };
 
+struct Notify {
+    handle: SocketHandle,
+    can_read: Sender<()>,
+    can_write: Sender<()>,
+}
+
+
 type Interface = std::sync::Arc<dyn DynamicInterface<'static> + 'static>;
-type DeviceType = FutureDevice<Receiver<Packet>, Sender<Packet>>;
-type IFace = EthernetInterface<'static, 'static, 'static, DeviceType>;
-pub type SharedSockets = Arc<RwLock<SocketSet<'static, 'static, 'static>>>;
 pub struct RawsockInterface {
     pub desc: InterfaceDescription,
     mac: EthernetAddress,
     data_link: rawsock::DataLink,
 
-    sockets: SharedSockets,
-    pulse_sender: Sender<()>,
+    waiter: Arc<Mutex<Vec<Notify>>>,
 
     pub running: task::JoinHandle<()>,
 }
 
+async fn process_iface(
+    interface: Interface,
+    mut net: Net,
+    mut packet_receiver: Receiver<Packet>,
+    waiter: Arc<Mutex<Vec<Notify>>>,
+) {
+    loop {
+        select! {
+            _ = net.wait().fuse() => {
+                let sockets = net.borrow_sockets();
+                let mut waiter = waiter.lock().await;
+                println!("poll1 {}", waiter.len());
+                for w in &mut waiter.iter_mut() {
+                    let s = sockets.get::<TcpSocket>(w.handle);
+                    if s.can_recv() {
+                        if let Err(e) = w.can_write.send(()).await {
+                            println!("send can recv {:?}", e);
+                        }
+                    }
+                };
+                println!("poll2 {}", waiter.len());
+            },
+            dat = packet_receiver.next().fuse() => {
+                if let Some(data) = dat {
+                    let _ = interface.send(&data);
+                }
+            },
+        }
+    }
+    println!("process_iface loop stop");
+}
+
 impl RawsockInterface {
-    fn new(slf: &RawsockInterfaceSet, desc: &mut InterfaceDescription) -> Result<RawsockInterface, Error> {
+    fn new(slf: &RawsockInterfaceSet, desc: &mut InterfaceDescription) -> super::Result<RawsockInterface> {
         let name = &desc.name;
         let mut interface = slf.lib.open_interface_arc(name)?;
         std::sync::Arc::get_mut(&mut interface).ok_or(Error::Other("Bad Arc"))?.set_filter_cstr(&slf.filter)?;
@@ -66,7 +100,7 @@ impl RawsockInterface {
         ];
         let (packet_sender, stream) = channel::<Packet>(2);
         let (sink, packet_receiver) = channel::<Packet>(2);
-        let (pulse_sender, pulse_receiver) = channel(1);
+        let (event_sender, event_receiver) = channel::<Event>(1);
         let device = task::block_on(FutureDevice::new(stream, sink));
 
         let iface = EthernetInterfaceBuilder::new(device)
@@ -74,28 +108,29 @@ impl RawsockInterface {
                 .neighbor_cache(neighbor_cache)
                 .ip_addrs(ip_addrs)
                 .finalize();
-        let sockets = Arc::new(RwLock::new(SocketSet::new(vec![])));
+        let net = Net::new(iface, 1);
 
+        let waiter = Arc::new(
+            Mutex::new(
+                Vec::new()
+            )
+        );
         Self::start_thread(interface.clone(), packet_sender);
-        let running = task::spawn(Self::run(
+        let running = task::spawn(process_iface(
             interface,
-            iface,
-            sockets.clone(),
+            net,
             packet_receiver,
-            pulse_receiver,
+            event_receiver,
+            waiter.clone(),
         ));
 
         Ok(RawsockInterface {
             data_link,
             desc: desc.clone(),
             mac,
-            sockets,
-            pulse_sender,
             running,
+            waiter,
         })
-    }
-    pub fn clone_sockets(&self) -> SharedSockets {
-        self.sockets.clone()
     }
     pub fn name(&self) -> &String {
         &self.desc.name
@@ -106,36 +141,7 @@ impl RawsockInterface {
     pub fn data_link(&self) -> rawsock::DataLink {
         self.data_link
     }
-    async fn run(
-        interface: Interface,
-        mut iface: EthernetInterface<'static, 'static, 'static, DeviceType>,
-        sockets: SharedSockets,
-        mut packet_receiver: Receiver<Packet>,
-        mut pulse_receiver: Receiver<()>,
-    ) {
-        loop {
-            {
-                let mut sockets = sockets.write().await;
-                select! {
-                    _ = iface.poll_async(&mut sockets).fuse() => {
-                        //
-                    },
-                    dat = packet_receiver.next().fuse() => {
-                        if let Some(data) = dat {
-                            let _ = interface.send(&data);
-                        }
-                    },
-                    _ = pulse_receiver.next().fuse() => {
-                        drop(sockets);
-                        pulse_receiver.next().await;
-                        // just to do next loop
-                    }
-                }
-            }
-        }
-    }
     fn start_thread(interface: Interface, mut packet_sender: Sender<Packet>) {
-        debug!("recv thread start");
         thread::spawn(move || {
             let r = interface.loop_infinite_dyn(&|packet| {
                 match task::block_on(packet_sender.send(packet.as_owned().to_vec())) {
@@ -148,34 +154,6 @@ impl RawsockInterface {
             }
             debug!("recv thread exit");
         });
-    }
-    pub(super) async fn borrow_socket<T, F, R>(&self, handle: SocketHandle, f: F) -> R
-    where
-        T: AnySocket<'static, 'static>,
-        F: FnOnce(&mut T) -> R
-    {
-        self.insert_loop(async {
-            let mut sockets = self.sockets.write().await;
-            let mut socket = sockets.get::<T>(handle);
-            f(&mut socket)
-        }).await
-    }
-    pub(super) async fn new_socket(&self) -> SocketHandle {
-        self.insert_loop(async {
-            let mut sockets = self.sockets.write().await;
-            let socket = TcpSocket::new(
-                TcpSocketBuffer::new(vec![0; 2048]),
-                TcpSocketBuffer::new(vec![0; 2048])
-            );
-            sockets.add(socket)
-        }).await
-    }
-    async fn insert_loop<R, F: Future<Output=R>>(&self, future: F) -> R {
-        let mut sender = self.pulse_sender.clone();
-        sender.send(()).await.unwrap();
-        let ret = future.await;
-        sender.send(()).await.unwrap();
-        ret
     }
 }
 
@@ -208,7 +186,7 @@ impl RawsockInterfaceSet {
             errored.into_iter().map(|i| i.err().unwrap()).collect::<Vec<_>>()
         )
     }
-    fn open_interface(&self, mut desc: InterfaceDescription) -> Result<RawsockInterface, ErrorWithDesc> {
+    fn open_interface(&self, mut desc: InterfaceDescription) -> std::result::Result<RawsockInterface, ErrorWithDesc> {
         RawsockInterface::new(self, &mut desc).map_err(|err| { ErrorWithDesc(err, desc) })
     }
 }
