@@ -8,6 +8,7 @@ mod interface_info;
 mod proxy;
 mod lan_play;
 mod error;
+mod future_smoltcp;
 
 use rawsock_socket::RawsockInterfaceSet;
 use smoltcp::{
