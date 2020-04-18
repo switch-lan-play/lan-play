@@ -1,0 +1,7 @@
+tasks:
+  - init: install libpcap
+    command: brew install libpcap && eval $(gp env -e LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/home/linuxbrew/.linuxbrew/lib/)
+vscode:
+  extensions:
+    - serayuzgur.crates@0.4.7:HMkoguLcXp9M3ud7ac3eIw==
+    - belfz.search-crates-io@1.2.1:kSLnyrOhXtYPjQpKnMr4eQ==
