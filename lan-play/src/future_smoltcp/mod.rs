@@ -1,30 +1,42 @@
+mod peekable_receiver;
+
 use smoltcp::{
     iface::{EthernetInterfaceBuilder, NeighborCache, EthernetInterface as SmoltcpEthernetInterface},
     wire::{EthernetAddress, IpCidr},
     socket::{SocketSet, SocketHandle, AnySocket},
-    time::{Instant},
+    time::{Instant, Duration},
     phy::{Device, DeviceCapabilities, RxToken, TxToken},
 };
 use std::collections::BTreeMap;
 use futures::stream::Stream;
 use futures::sink::{Sink, SinkExt};
 use futures::executor::block_on;
-use tokio::sync::mpsc;
+use futures::task::AtomicWaker;
+use futures::select;
+use futures::prelude::*;
+use tokio::time::{delay_for};
+use tokio::sync::{mpsc, Mutex};
 use std::pin::Pin;
+use std::sync::Arc;
 use std::task::{Context, Poll, Waker};
+use peekable_receiver::PeekableReceiver;
 
 type Packet = Vec<u8>;
 
-pub struct EthernetInterface {
+struct EthernetRunner {
     inner: SmoltcpEthernetInterface<'static, 'static, 'static, FutureDevice>,
-    receiver: mpsc::Receiver<Packet>,
-    sender: mpsc::Sender<Packet>,
     sockets: SocketSet<'static, 'static, 'static>,
+}
+
+pub struct EthernetInterface {
 }
 
 impl EthernetInterface {
     pub fn new(ethernet_addr: EthernetAddress, ip_addrs: Vec<IpCidr>) -> EthernetInterface {
-        let (device, (sender, receiver)) = FutureDevice::new2();
+        let (recv_tx, recv_rx) = mpsc::channel(1);
+        let (send_tx, send_rx) = mpsc::channel(1);
+
+        let device = FutureDevice::new(send_tx, recv_rx);
         let neighbor_cache = NeighborCache::new(BTreeMap::new());
         let inner = EthernetInterfaceBuilder::new(device)
             .ethernet_addr(ethernet_addr)
@@ -33,48 +45,66 @@ impl EthernetInterface {
             .finalize();
         let sockets = SocketSet::new(vec![]);
 
-        EthernetInterface {
+        tokio::spawn(Self::run(EthernetRunner {
             inner,
-            receiver,
-            sender,
             sockets,
+        }));
+        
+
+        EthernetInterface {
         }
     }
-}
+    async fn run(mut args: EthernetRunner) {
+        let default_timeout = Duration::from_millis(1000);
+        let EthernetRunner { inner, sockets, .. } = &mut args;
 
-impl Stream for EthernetInterface {
-    type Item = Packet;
+        loop {
+            let start = Instant::now();
+            let deadline = inner.poll_delay(sockets, start).unwrap_or(default_timeout);
+            let device = inner.device_mut();
 
-    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
-        let device = self.inner.device_mut();
-        device.set_waker(cx.waker().clone());
-        match self.inner.poll(&mut self.sockets, Instant::now()) {
+            select! {
+                _ = delay_for(deadline.into()).fuse() => (),
+                _ = device.receiver.peek().fuse() => (),
+            }
+            let end = Instant::now();
+            let readiness = match inner.poll(sockets, end) {
+                Ok(b) => b,
+                Err(e) => {
+                    log::error!("poll error {:?}", e);
+                    return;
+                },
+            };
 
+            if readiness {
+
+            }
         }
-
     }
 }
 
 pub struct FutureDevice {
     caps: DeviceCapabilities,
-    receiver: mpsc::Receiver<Packet>,
+    receiver: PeekableReceiver<Packet>,
     sender: mpsc::Sender<Packet>,
-    waker: Option<Waker>,
 }
 
 impl FutureDevice {
+    fn new(tx: mpsc::Sender<Packet>, rx: mpsc::Receiver<Packet>) -> FutureDevice {
+        FutureDevice {
+            caps: DeviceCapabilities::default(),
+            receiver: PeekableReceiver::new(rx),
+            sender: tx,
+        }
+    }
     fn new2() -> (FutureDevice, (mpsc::Sender<Packet>, mpsc::Receiver<Packet>)) {
         let (recv_tx, recv_rx) = mpsc::channel(1);
         let (send_tx, send_rx) = mpsc::channel(1);
         (FutureDevice {
             caps: DeviceCapabilities::default(),
-            receiver: recv_rx,
+            receiver: PeekableReceiver::new(recv_rx),
             sender: send_tx,
-            waker: None,
         }, (recv_tx, send_rx))
-    }
-    fn set_waker(&mut self, waker: Waker) {
-        self.waker = Some(waker)
     }
 }
 
@@ -120,6 +150,7 @@ where
             Ok(packet) => Some(
                 (FutureRxToken(packet), FutureTxToken(self.sender.clone()))
             ),
+            // TODO handle receiver closed
             _ => None
         }
     }
