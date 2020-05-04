@@ -97,6 +97,9 @@ impl EthernetInterface {
                     match e {
                         Event::NewSocket(socket, tx) => {
                             tx.send(sockets.add(socket)).unwrap();
+                        },
+                        Event::RemoveSocket(handle) => {
+                            sockets.remove(handle);
                         }
                     }
                 },
