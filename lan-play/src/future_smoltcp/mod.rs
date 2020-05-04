@@ -1,9 +1,10 @@
 mod peekable_receiver;
+mod socket;
 
 use smoltcp::{
     iface::{EthernetInterfaceBuilder, NeighborCache, EthernetInterface as SmoltcpEthernetInterface},
     wire::{EthernetAddress, IpCidr},
-    socket::{SocketSet, SocketHandle, AnySocket},
+    socket::{SocketSet, SocketHandle, Socket},
     time::{Instant, Duration},
     phy::{Device, DeviceCapabilities, RxToken, TxToken},
 };
@@ -15,28 +16,36 @@ use futures::task::AtomicWaker;
 use futures::select;
 use futures::prelude::*;
 use tokio::time::{delay_for};
-use tokio::sync::{mpsc, Mutex};
+use tokio::sync::{mpsc, oneshot};
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll, Waker};
 use peekable_receiver::PeekableReceiver;
+
+#[derive(Debug)]
+enum Event {
+    NewSocket(Socket<'static, 'static>, oneshot::Sender<SocketHandle>),
+    RemoveSocket(SocketHandle),
+}
 
 type Packet = Vec<u8>;
 
 struct EthernetRunner {
     inner: SmoltcpEthernetInterface<'static, 'static, 'static, FutureDevice>,
     sockets: SocketSet<'static, 'static, 'static>,
+    event_recv: mpsc::Receiver<Event>,
 }
 
 pub struct EthernetInterface {
+    receiver: mpsc::Receiver<Packet>,
+    sender: mpsc::Sender<Packet>,
+    event_send: mpsc::Sender<Event>,
 }
 
 impl EthernetInterface {
     pub fn new(ethernet_addr: EthernetAddress, ip_addrs: Vec<IpCidr>) -> EthernetInterface {
-        let (recv_tx, recv_rx) = mpsc::channel(1);
-        let (send_tx, send_rx) = mpsc::channel(1);
-
-        let device = FutureDevice::new(send_tx, recv_rx);
+        let (event_send, event_recv) = mpsc::channel(1);
+        let (device, (sender, receiver)) = FutureDevice::new2();
         let neighbor_cache = NeighborCache::new(BTreeMap::new());
         let inner = EthernetInterfaceBuilder::new(device)
             .ethernet_addr(ethernet_addr)
@@ -48,15 +57,29 @@ impl EthernetInterface {
         tokio::spawn(Self::run(EthernetRunner {
             inner,
             sockets,
+            event_recv,
         }));
         
-
         EthernetInterface {
+            receiver,
+            sender,
+            event_send,
         }
+    }
+    async fn new_socket<T>(&self, socket: T) -> SocketHandle
+    where
+        T: Into<Socket<'static, 'static>>,
+    {
+        let (tx, rx) = oneshot::channel();
+        self.event_send.clone().send(Event::NewSocket(socket.into(), tx)).await;
+        rx.await.unwrap()
+    }
+    fn remove_socket(&self, handle: SocketHandle) {
+        self.event_send.clone().try_send(Event::RemoveSocket(handle)).unwrap()
     }
     async fn run(mut args: EthernetRunner) {
         let default_timeout = Duration::from_millis(1000);
-        let EthernetRunner { inner, sockets, .. } = &mut args;
+        let EthernetRunner { inner, sockets, event_recv } = &mut args;
 
         loop {
             let start = Instant::now();
@@ -66,6 +89,18 @@ impl EthernetInterface {
             select! {
                 _ = delay_for(deadline.into()).fuse() => (),
                 _ = device.receiver.peek().fuse() => (),
+                e = event_recv.recv().fuse() => {
+                    let e = match e {
+                        Some(e) => e,
+                        None => return,
+                    };
+                    match e {
+                        Event::NewSocket(socket, tx) => {
+                            tx.send(sockets.add(socket)).unwrap();
+                        }
+                    }
+                },
+                default => (),
             }
             let end = Instant::now();
             let readiness = match inner.poll(sockets, end) {
