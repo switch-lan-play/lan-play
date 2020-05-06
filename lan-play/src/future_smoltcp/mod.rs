@@ -1,10 +1,12 @@
 mod peekable_receiver;
 mod socket;
+mod socketset;
 
+use socketset::SocketSet;
 use smoltcp::{
     iface::{EthernetInterfaceBuilder, NeighborCache, EthernetInterface as SmoltcpEthernetInterface},
     wire::{EthernetAddress, IpCidr},
-    socket::{SocketSet, SocketHandle, Socket},
+    socket::{SocketHandle, Socket},
     time::{Instant, Duration},
     phy::{Device, DeviceCapabilities, RxToken, TxToken},
 };
@@ -24,15 +26,16 @@ use peekable_receiver::PeekableReceiver;
 
 #[derive(Debug)]
 enum Event {
-    NewSocket(Socket<'static, 'static>, oneshot::Sender<SocketHandle>),
-    RemoveSocket(SocketHandle),
+    // NewSocket(Socket<'static, 'static>, oneshot::Sender<SocketHandle>),
+    // RemoveSocket(SocketHandle),
+    SocketSet(Box<dyn FnOnce(&mut SocketSet)>)
 }
 
 type Packet = Vec<u8>;
 
 struct EthernetRunner {
     inner: SmoltcpEthernetInterface<'static, 'static, 'static, FutureDevice>,
-    sockets: SocketSet<'static, 'static, 'static>,
+    sockets: SocketSet,
     event_recv: mpsc::Receiver<Event>,
 }
 
@@ -66,16 +69,19 @@ impl EthernetInterface {
             event_send,
         }
     }
-    async fn new_socket<T>(&self, socket: T) -> SocketHandle
-    where
-        T: Into<Socket<'static, 'static>>,
-    {
-        let (tx, rx) = oneshot::channel();
-        self.event_send.clone().send(Event::NewSocket(socket.into(), tx)).await;
-        rx.await.unwrap()
-    }
-    fn remove_socket(&self, handle: SocketHandle) {
-        self.event_send.clone().try_send(Event::RemoveSocket(handle)).unwrap()
+    // async fn new_socket<T>(&self, socket: T) -> SocketHandle
+    // where
+    //     T: Into<Socket<'static, 'static>>,
+    // {
+    //     let (tx, rx) = oneshot::channel();
+    //     self.event_send.clone().send(Event::NewSocket(socket.into(), tx)).await;
+    //     rx.await.unwrap()
+    // }
+    // fn remove_socket(&self, handle: SocketHandle) {
+    //     self.event_send.clone().try_send(Event::RemoveSocket(handle)).unwrap()
+    // }
+    pub fn push_socket(&self, handle: SocketHandle) {
+        
     }
     async fn run(mut args: EthernetRunner) {
         let default_timeout = Duration::from_millis(1000);
@@ -83,7 +89,7 @@ impl EthernetInterface {
 
         loop {
             let start = Instant::now();
-            let deadline = inner.poll_delay(sockets, start).unwrap_or(default_timeout);
+            let deadline = inner.poll_delay(sockets.as_set_mut(), start).unwrap_or(default_timeout);
             let device = inner.device_mut();
 
             select! {
@@ -95,18 +101,15 @@ impl EthernetInterface {
                         None => return,
                     };
                     match e {
-                        Event::NewSocket(socket, tx) => {
-                            tx.send(sockets.add(socket)).unwrap();
-                        },
-                        Event::RemoveSocket(handle) => {
-                            sockets.remove(handle);
+                        Event::SocketSet(func) => {
+                            func(sockets)
                         }
                     }
                 },
                 default => (),
             }
             let end = Instant::now();
-            let readiness = match inner.poll(sockets, end) {
+            let readiness = match inner.poll(sockets.as_set_mut(), end) {
                 Ok(b) => b,
                 Err(e) => {
                     log::error!("poll error {:?}", e);
