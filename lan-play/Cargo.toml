@@ -19,10 +19,11 @@ async-trait = "0.1"
 [dependencies.smoltcp]
 # version = "0.5.0"
 git = "https://github.com/switch-lan-play/smoltcp.git"
-branch = "accept-all-master"
+branch = "accept-all-0.6.0"
 default-features = false
 features = [
     "std", "log",
+    "ethernet",
     "proto-ipv4", "proto-ipv6",
     "socket-tcp", "socket-udp", "socket-icmp",
     "verbose",
