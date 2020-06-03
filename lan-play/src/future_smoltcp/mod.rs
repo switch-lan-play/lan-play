@@ -11,24 +11,17 @@ use smoltcp::{
     phy::{Device, DeviceCapabilities, RxToken, TxToken},
 };
 use std::collections::BTreeMap;
-use futures::stream::Stream;
-use futures::sink::{Sink, SinkExt};
-use futures::executor::block_on;
-use futures::task::AtomicWaker;
 use futures::select;
 use futures::prelude::*;
 use tokio::time::{delay_for};
 use tokio::sync::{mpsc, oneshot};
-use std::pin::Pin;
-use std::sync::Arc;
-use std::task::{Context, Poll, Waker};
 use peekable_receiver::PeekableReceiver;
 
 #[derive(Debug)]
 enum Event {
     // NewSocket(Socket<'static, 'static>, oneshot::Sender<SocketHandle>),
     // RemoveSocket(SocketHandle),
-    SocketSet(Box<dyn FnOnce(&mut SocketSet)>)
+    // SocketSet(Box<dyn FnOnce(&mut SocketSet)>)
 }
 
 type Packet = Vec<u8>;
@@ -55,7 +48,7 @@ impl EthernetInterface {
             .ip_addrs(ip_addrs)
             .neighbor_cache(neighbor_cache)
             .finalize();
-        let sockets = SocketSet::new(vec![]);
+        let sockets = SocketSet::new();
 
         tokio::spawn(Self::run(EthernetRunner {
             inner,
@@ -95,17 +88,17 @@ impl EthernetInterface {
             select! {
                 _ = delay_for(deadline.into()).fuse() => (),
                 _ = device.receiver.peek().fuse() => (),
-                e = event_recv.recv().fuse() => {
-                    let e = match e {
-                        Some(e) => e,
-                        None => return,
-                    };
-                    match e {
-                        Event::SocketSet(func) => {
-                            func(sockets)
-                        }
-                    }
-                },
+                // e = event_recv.recv().fuse() => {
+                //     let e = match e {
+                //         Some(e) => e,
+                //         None => return,
+                //     };
+                //     match e {
+                //         Event::SocketSet(func) => {
+                //             func(sockets)
+                //         }
+                //     }
+                // },
                 default => (),
             }
             let end = Instant::now();

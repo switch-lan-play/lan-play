@@ -12,22 +12,22 @@ pub struct TcpListener {
 
 impl Drop for TcpListener {
     fn drop(&mut self) {
-        self.inner.remove_socket(self.handle);
+        // self.inner.remove_socket(self.handle);
     }
 }
 
-impl TcpListener {
-    pub async fn new(inner: EthernetInterface) -> TcpListener {
-        let handle = inner.new_socket(new_tcp_socket()).await;
-        TcpListener {
-            inner,
-            handle,
-        }
-    }
-    pub fn accept(&mut self) {
+// impl TcpListener {
+//     pub async fn new(inner: EthernetInterface) -> TcpListener {
+//         let handle = inner.new_socket(new_tcp_socket()).await;
+//         TcpListener {
+//             inner,
+//             handle,
+//         }
+//     }
+//     pub fn accept(&mut self) {
 
-    }
-}
+//     }
+// }
 
 fn new_tcp_socket() -> TcpSocket<'static> {
     let rx_buffer = TcpSocketBuffer::new(vec![0; 2048]);

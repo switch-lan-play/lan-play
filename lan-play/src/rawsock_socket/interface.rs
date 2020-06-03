@@ -1,40 +1,36 @@
 use crate::interface_info::{get_interface_info, InterfaceInfo};
 use rawsock::traits::{DynamicInterface, Library};
 use rawsock::InterfaceDescription;
-use smoltcp::{
-    iface::{EthernetInterfaceBuilder, NeighborCache, EthernetInterface},
-    wire::{EthernetAddress, Ipv4Cidr},
-    socket::{SocketSet, SocketHandle, AnySocket},
-    time::{Instant},
-};
-use std::collections::BTreeMap;
+use smoltcp::wire::{EthernetAddress, Ipv4Cidr};
 use std::thread;
-use super::device::{FutureDevice, Packet, AsyncIface};
-use log::{warn, debug};
+use super::device::Packet;
 use super::{Error, ErrorWithDesc};
 use std::ffi::CString;
-use std::future::Future;
-use std::pin::Pin;
-use std::task::{Context, Poll};
-use futures::channel::mpsc::{channel, Sender, Receiver};
+use tokio::sync::mpsc::{channel, Sender, Receiver};
 use tokio::task;
-use futures::select;
-use futures::prelude::*;
-
-use smoltcp::{
-    socket::{TcpSocket, TcpSocketBuffer},
-};
+use tokio::stream::Stream;
 
 type Interface = std::sync::Arc<dyn DynamicInterface<'static> + 'static>;
-type DeviceType = FutureDevice<Receiver<Packet>, Sender<Packet>>;
-type IFace = EthernetInterface<'static, 'static, 'static, DeviceType>;
-type SharedSockets = SocketSet<'static, 'static, 'static>;
 pub struct RawsockInterface {
     pub desc: InterfaceDescription,
     mac: EthernetAddress,
     data_link: rawsock::DataLink,
 
+    stream: Receiver<Packet>,
+    sink: Sender<Packet>,
+
     pub running: task::JoinHandle<()>,
+}
+
+impl Stream for RawsockInterface {
+    type Item = Packet;
+    fn poll_next(
+        self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Option<Self::Item>> {
+        let s = self.get_mut();
+        s.stream.poll_recv(cx)
+    }
 }
 
 impl RawsockInterface {
@@ -56,24 +52,12 @@ impl RawsockInterface {
             desc.description = description;
         }
 
-        let neighbor_cache = NeighborCache::new(BTreeMap::new());
-        let ip_addrs = [
-            slf.ip.into(),
-        ];
         let (packet_sender, stream) = channel::<Packet>(2);
         let (sink, packet_receiver) = channel::<Packet>(2);
-        let device = futures::executor::block_on(FutureDevice::new(stream, sink));
-
-        let iface = EthernetInterfaceBuilder::new(device)
-                .ethernet_addr(mac.clone())
-                .neighbor_cache(neighbor_cache)
-                .ip_addrs(ip_addrs)
-                .finalize();
 
         Self::start_thread(interface.clone(), packet_sender);
         let running = task::spawn(Self::run(
             interface,
-            iface,
             packet_receiver,
         ));
 
@@ -82,7 +66,12 @@ impl RawsockInterface {
             desc: desc.clone(),
             mac,
             running,
+            stream,
+            sink,
         })
+    }
+    pub async fn send(&mut self, packet: Packet) -> Result<(), Error> {
+        self.sink.send(packet).await.map_err(|e| Error::Other("Send error".into()))
     }
     pub fn name(&self) -> &String {
         &self.desc.name
@@ -95,36 +84,28 @@ impl RawsockInterface {
     }
     async fn run(
         interface: Interface,
-        mut iface: EthernetInterface<'static, 'static, 'static, DeviceType>,
         mut packet_receiver: Receiver<Packet>,
     ) {
-        let mut sockets = SocketSet::new(vec![]);
         loop {
-            select! {
-                _ = iface.poll_async(&mut sockets).fuse() => {
-                    //
-                },
-                dat = packet_receiver.next().fuse() => {
-                    if let Some(data) = dat {
-                        let _ = interface.send(&data);
-                    }
-                },
+            let dat = packet_receiver.recv().await;
+            if let Some(data) = dat {
+                let _ = interface.send(&data);
             }
         }
     }
     fn start_thread(interface: Interface, mut packet_sender: Sender<Packet>) {
-        debug!("recv thread start");
+        log::debug!("recv thread start");
         thread::spawn(move || {
             let r = interface.loop_infinite_dyn(&|packet| {
                 match futures::executor::block_on(packet_sender.send(packet.as_owned().to_vec())) {
-                    Ok(_) => (),
-                    Err(err) => warn!("recv error: {:?}", err)
+                    Ok(_) => {},
+                    Err(err) => log::warn!("recv error: {:?}", err)
                 }
             });
             if !r.is_ok() {
-                warn!("loop_infinite {:?}", r);
+                log::warn!("loop_infinite {:?}", r);
             }
-            debug!("recv thread exit");
+            log::debug!("recv thread exit");
         });
     }
 }
@@ -132,18 +113,16 @@ impl RawsockInterface {
 pub struct RawsockInterfaceSet {
     lib: &'static Box<dyn Library>,
     all_interf: Vec<rawsock::InterfaceDescription>,
-    ip: Ipv4Cidr,
     filter: CString,
 }
 impl RawsockInterfaceSet {
     pub fn new(lib: &'static Box<dyn Library>, ip: Ipv4Cidr) -> Result<RawsockInterfaceSet, rawsock::Error> {
         let all_interf = lib.all_interfaces()?;
         let filter = format!("net {}", ip.network());
-        debug!("filter: {}", filter);
+        log::debug!("filter: {}", filter);
         Ok(RawsockInterfaceSet {
             lib,
             all_interf,
-            ip,
             filter: CString::new(filter)?,
         })
     }
