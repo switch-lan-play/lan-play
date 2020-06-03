@@ -16,6 +16,7 @@ use futures::prelude::*;
 use tokio::time::{delay_for};
 use tokio::sync::{mpsc, oneshot};
 use peekable_receiver::PeekableReceiver;
+use crate::rawsock_socket::RawsockInterface;
 
 #[derive(Debug)]
 enum Event {
@@ -33,15 +34,14 @@ struct EthernetRunner {
 }
 
 pub struct EthernetInterface {
-    receiver: mpsc::Receiver<Packet>,
-    sender: mpsc::Sender<Packet>,
     event_send: mpsc::Sender<Event>,
 }
 
 impl EthernetInterface {
-    pub fn new(ethernet_addr: EthernetAddress, ip_addrs: Vec<IpCidr>) -> EthernetInterface {
+    pub fn new(ethernet_addr: EthernetAddress, ip_addrs: Vec<IpCidr>, interf: RawsockInterface) -> EthernetInterface {
         let (event_send, event_recv) = mpsc::channel(1);
-        let (device, (sender, receiver)) = FutureDevice::new2();
+        let (tx, rx) = interf.into_streams();
+        let device = FutureDevice::new(tx, rx);
         let neighbor_cache = NeighborCache::new(BTreeMap::new());
         let inner = EthernetInterfaceBuilder::new(device)
             .ethernet_addr(ethernet_addr)
@@ -57,8 +57,6 @@ impl EthernetInterface {
         }));
         
         EthernetInterface {
-            receiver,
-            sender,
             event_send,
         }
     }

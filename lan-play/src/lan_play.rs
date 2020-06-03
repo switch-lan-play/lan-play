@@ -1,10 +1,16 @@
 use crate::proxy::Proxy;
 use crate::error::{Error, Result};
 use crate::rawsock_socket::{ErrorWithDesc, RawsockInterfaceSet, RawsockInterface};
+use crate::future_smoltcp::EthernetInterface;
 use tokio::task;
+use tokio::stream::StreamExt;
+use smoltcp::{
+    wire::{Ipv4Cidr, Ipv4Address}
+};
 
 pub struct LanPlay<P> {
     proxy: P,
+    gateway_ip: Ipv4Address,
 }
 
 #[async_trait(?Send)]
@@ -16,22 +22,24 @@ impl<P> LanPlay<P>
 where
     P: Proxy + 'static
 {
-    pub async fn new(proxy: P) -> Result<Box<dyn LanPlayMain>> {
+    pub async fn new(proxy: P, gateway_ip: Ipv4Address) -> Result<Box<dyn LanPlayMain>> {
         let ret: Box<dyn LanPlayMain> = Box::new(Self {
             proxy,
+            gateway_ip,
         });
         Ok(ret)
     }
 }
 
-async fn process_interface(mut interf: RawsockInterface) {
+async fn process_interface(mut interf: RawsockInterface, gateway_ip: Ipv4Address) {
     // {
     //     let mut tcp_listener = TcpListener::new(&mut interf).await.unwrap();
     //     while let Ok(Some(socket)) = tcp_listener.next().await {
     //         println!("new connection");
     //     }
     // }
-    (&mut interf.running).await;
+    let mac = interf.mac();
+    EthernetInterface::new(mac.clone(), vec![gateway_ip], interf);
 }
 
 #[async_trait(?Send)]
@@ -53,7 +61,7 @@ impl<P> LanPlayMain for LanPlay<P> {
     
         let mut handles: Vec<task::JoinHandle<()>> = vec![];
         for interface in opened {
-            handles.push(task::spawn(process_interface(interface)));
+            handles.push(task::spawn(process_interface(interface, self.gateway_ip)));
         }
         for t in handles {
             t.await;

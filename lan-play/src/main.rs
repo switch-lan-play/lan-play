@@ -18,6 +18,20 @@ use rawsock::traits::Library;
 use lan_play::LanPlay;
 use proxy::DirectProxy;
 use error::Result;
+use std::net::{Ipv4Addr, AddrParseError};
+use structopt::StructOpt;
+
+// fn parse_ip(src: &str) -> std::result::Result<Ipv4Addr, AddrParseError> {
+//     src.parse()
+// }
+
+/// Lan play
+#[derive(Debug, StructOpt)]
+struct Opt {
+    /// IP Address
+    #[structopt(short, long, parse(try_from_str = str::parse), default_value = "10.13.37.1")]
+    gateway_ip: Ipv4Addr,
+}
 
 lazy_static! {
     static ref RAWSOCK_LIB: Box<dyn Library> = {
@@ -35,6 +49,8 @@ fn open_best_library() -> Result<Box<dyn Library>> {
 }
 
 async fn async_main() -> Result<()> {
+    let opt = Opt::from_args();
+
     let set = RawsockInterfaceSet::new(&RAWSOCK_LIB,
         Ipv4Cidr::new(Ipv4Address::new(10, 13, 37, 2), 16),
     ).expect("Could not open any packet capturing library");
@@ -48,6 +64,7 @@ async fn async_main() -> Result<()> {
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    dotenv::dotenv().ok();
     env_logger::init();
 
     async_main().await

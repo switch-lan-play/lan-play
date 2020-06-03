@@ -8,7 +8,6 @@ use super::{Error, ErrorWithDesc};
 use std::ffi::CString;
 use tokio::sync::mpsc::{channel, Sender, Receiver};
 use tokio::task;
-use tokio::stream::Stream;
 
 type Interface = std::sync::Arc<dyn DynamicInterface<'static> + 'static>;
 pub struct RawsockInterface {
@@ -20,17 +19,6 @@ pub struct RawsockInterface {
     sink: Sender<Packet>,
 
     pub running: task::JoinHandle<()>,
-}
-
-impl Stream for RawsockInterface {
-    type Item = Packet;
-    fn poll_next(
-        self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<Option<Self::Item>> {
-        let s = self.get_mut();
-        s.stream.poll_recv(cx)
-    }
 }
 
 impl RawsockInterface {
@@ -81,6 +69,9 @@ impl RawsockInterface {
     }
     pub fn data_link(&self) -> rawsock::DataLink {
         self.data_link
+    }
+    pub fn into_streams(self) -> (Sender<Packet>, Receiver<Packet>) {
+        (self.sink, self.stream)
     }
     async fn run(
         interface: Interface,
