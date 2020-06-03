@@ -15,6 +15,7 @@ use futures::select;
 use futures::prelude::*;
 use tokio::time::{delay_for};
 use tokio::sync::{mpsc, oneshot};
+use tokio::stream::Stream;
 use peekable_receiver::PeekableReceiver;
 use crate::rawsock_socket::RawsockInterface;
 
@@ -29,17 +30,29 @@ type Packet = Vec<u8>;
 
 struct EthernetRunner {
     inner: SmoltcpEthernetInterface<'static, 'static, 'static, FutureDevice>,
-    sockets: SocketSet,
     event_recv: mpsc::Receiver<Event>,
 }
 
 pub struct EthernetInterface {
     event_send: mpsc::Sender<Event>,
+    socket_sender: mpsc::Sender<()>,
+    socket_stream: mpsc::Receiver<()>,
 }
+
+// impl Stream for EthernetInterface {
+//     type Item = ESocket;
+//     fn poll_next(
+//         self: Pin<&mut Self>,
+//         cx: &mut Context<'_>,
+//     ) -> Poll<Option<Self::Item>> {
+
+//     }
+// }
 
 impl EthernetInterface {
     pub fn new(ethernet_addr: EthernetAddress, ip_addrs: Vec<IpCidr>, interf: RawsockInterface) -> EthernetInterface {
         let (event_send, event_recv) = mpsc::channel(1);
+        let (socket_send, socket_recv) = mpsc::channel(1);
         let (tx, rx) = interf.into_streams();
         let device = FutureDevice::new(tx, rx);
         let neighbor_cache = NeighborCache::new(BTreeMap::new());
@@ -52,12 +65,13 @@ impl EthernetInterface {
 
         tokio::spawn(Self::run(EthernetRunner {
             inner,
-            sockets,
             event_recv,
         }));
         
         EthernetInterface {
             event_send,
+            socket_sender: socket_send,
+            socket_stream: socket_recv,
         }
     }
     // async fn new_socket<T>(&self, socket: T) -> SocketHandle
@@ -71,12 +85,13 @@ impl EthernetInterface {
     // fn remove_socket(&self, handle: SocketHandle) {
     //     self.event_send.clone().try_send(Event::RemoveSocket(handle)).unwrap()
     // }
-    pub fn push_socket(&self, handle: SocketHandle) {
-        
+    pub async fn next_socket(&mut self) -> Option<()> {
+        self.socket_stream.recv().await
     }
     async fn run(mut args: EthernetRunner) {
         let default_timeout = Duration::from_millis(1000);
-        let EthernetRunner { inner, sockets, event_recv } = &mut args;
+        let EthernetRunner { inner, event_recv } = &mut args;
+        let mut sockets = SocketSet::new();
 
         loop {
             let start = Instant::now();
@@ -84,20 +99,8 @@ impl EthernetInterface {
             let device = inner.device_mut();
 
             select! {
-                _ = delay_for(deadline.into()).fuse() => (),
-                _ = device.receiver.peek().fuse() => (),
-                // e = event_recv.recv().fuse() => {
-                //     let e = match e {
-                //         Some(e) => e,
-                //         None => return,
-                //     };
-                //     match e {
-                //         Event::SocketSet(func) => {
-                //             func(sockets)
-                //         }
-                //     }
-                // },
-                default => (),
+                _ = delay_for(deadline.into()).fuse() => {},
+                _ = device.receiver.peek().fuse() => {},
             }
             let end = Instant::now();
             let readiness = match inner.poll(sockets.as_set_mut(), end) {
@@ -123,20 +126,14 @@ pub struct FutureDevice {
 
 impl FutureDevice {
     fn new(tx: mpsc::Sender<Packet>, rx: mpsc::Receiver<Packet>) -> FutureDevice {
+        let mut caps = DeviceCapabilities::default();
+        caps.max_transmission_unit = 1536;
+        caps.max_burst_size = Some(1);
         FutureDevice {
-            caps: DeviceCapabilities::default(),
+            caps,
             receiver: PeekableReceiver::new(rx),
             sender: tx,
         }
-    }
-    fn new2() -> (FutureDevice, (mpsc::Sender<Packet>, mpsc::Receiver<Packet>)) {
-        let (recv_tx, recv_rx) = mpsc::channel(1);
-        let (send_tx, send_rx) = mpsc::channel(1);
-        (FutureDevice {
-            caps: DeviceCapabilities::default(),
-            receiver: PeekableReceiver::new(recv_rx),
-            sender: send_tx,
-        }, (recv_tx, send_rx))
     }
 }
 

@@ -1,36 +1,33 @@
 use super::EthernetInterface;
-use smoltcp::socket::{SocketHandle, TcpSocket, TcpSocketBuffer};
+use tokio::io::{self, AsyncRead};
+use std::pin::Pin;
+use std::task::{Context, Poll};
 
-pub enum SocketState {
-
+pub enum Socket {
+    TcpSocket(TcpSocket),
+    UdpSocket(UdpSocket),
 }
 
-pub struct TcpListener {
-    inner: EthernetInterface,
-    handle: SocketHandle,
+pub struct TcpSocket {
 }
 
-impl Drop for TcpListener {
-    fn drop(&mut self) {
-        // self.inner.remove_socket(self.handle);
-    }
+pub struct UdpSocket {
 }
 
-// impl TcpListener {
-//     pub async fn new(inner: EthernetInterface) -> TcpListener {
-//         let handle = inner.new_socket(new_tcp_socket()).await;
-//         TcpListener {
-//             inner,
-//             handle,
-//         }
-//     }
-//     pub fn accept(&mut self) {
+pub struct SocketLeaf {
+    
+}
+
+impl TcpSocket {
+    
+}
+
+// impl AsyncRead for TcpSocket {
+//     fn poll_read(
+//         self: Pin<&mut Self>,
+//         cx: &mut Context<'_>,
+//         buf: &mut [u8],
+//     ) -> Poll<io::Result<usize>> {
 
 //     }
 // }
-
-fn new_tcp_socket() -> TcpSocket<'static> {
-    let rx_buffer = TcpSocketBuffer::new(vec![0; 2048]);
-    let tx_buffer = TcpSocketBuffer::new(vec![0; 2048]);
-    TcpSocket::new(rx_buffer, tx_buffer)
-}

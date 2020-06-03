@@ -7,8 +7,8 @@ use std::sync::Mutex;
 
 pub struct SocketSet {
     set: socket::SocketSet<'static, 'static, 'static>,
-    tcp_listener: Option<TcpSocket<'static>>,
-    udp_listener: Option<UdpSocket<'static, 'static>>,
+    tcp_listener: Option<SocketHandle>,
+    udp_listener: Option<SocketHandle>,
 }
 
 impl SocketSet {
@@ -23,10 +23,12 @@ impl SocketSet {
     }
     fn preserve_socket(&mut self) {
         if self.tcp_listener.is_none() {
-            self.tcp_listener = Some(new_tcp_socket())
+            let handle = self.set.add(new_tcp_socket());
+            self.tcp_listener = Some(handle)
         }
         if self.udp_listener.is_none() {
-            self.udp_listener = Some(new_udp_socket())
+            let handle = self.set.add(new_udp_socket());
+            self.udp_listener = Some(handle)
         }
     }
     pub fn as_set_mut(&mut self) -> &mut socket::SocketSet<'static, 'static, 'static> {

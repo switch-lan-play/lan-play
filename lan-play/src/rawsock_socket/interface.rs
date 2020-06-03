@@ -58,9 +58,6 @@ impl RawsockInterface {
             sink,
         })
     }
-    pub async fn send(&mut self, packet: Packet) -> Result<(), Error> {
-        self.sink.send(packet).await.map_err(|e| Error::Other("Send error".into()))
-    }
     pub fn name(&self) -> &String {
         &self.desc.name
     }

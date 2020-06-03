@@ -2,6 +2,7 @@
 pub enum Error {
     RawsockError(rawsock::Error),
     NoInterface,
+    Other(String),
 }
 pub type Result<T> = std::result::Result<T, Error>;
 
