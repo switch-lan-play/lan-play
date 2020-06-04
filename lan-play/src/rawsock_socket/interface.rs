@@ -8,17 +8,14 @@ use super::{Error, ErrorWithDesc};
 use std::ffi::CString;
 use tokio::sync::mpsc::{channel, Sender, Receiver};
 use tokio::task;
+use std::sync::Arc;
 
 type Interface = std::sync::Arc<dyn DynamicInterface<'static> + 'static>;
 pub struct RawsockInterface {
     pub desc: InterfaceDescription,
     mac: EthernetAddress,
     data_link: rawsock::DataLink,
-
-    stream: Receiver<Packet>,
-    sink: Sender<Packet>,
-
-    pub running: task::JoinHandle<()>,
+    interface: Arc<dyn DynamicInterface<'static>>,
 }
 
 impl RawsockInterface {
@@ -40,22 +37,11 @@ impl RawsockInterface {
             desc.description = description;
         }
 
-        let (packet_sender, stream) = channel::<Packet>(2);
-        let (sink, packet_receiver) = channel::<Packet>(2);
-
-        Self::start_thread(interface.clone(), packet_sender);
-        let running = task::spawn(Self::run(
-            interface,
-            packet_receiver,
-        ));
-
         Ok(RawsockInterface {
             data_link,
             desc: desc.clone(),
             mac,
-            running,
-            stream,
-            sink,
+            interface,
         })
     }
     pub fn name(&self) -> &String {
@@ -67,15 +53,27 @@ impl RawsockInterface {
     pub fn data_link(&self) -> rawsock::DataLink {
         self.data_link
     }
-    pub fn into_streams(self) -> (Sender<Packet>, Receiver<Packet>) {
-        (self.sink, self.stream)
+    pub fn start(self) -> (tokio::task::JoinHandle<()>, Sender<Packet>, Receiver<Packet>) {
+        let interface = self.interface;
+        let (packet_sender, stream) = channel::<Packet>(2);
+        let (sink, packet_receiver) = channel::<Packet>(2);
+
+        Self::start_thread(interface.clone(), packet_sender);
+        let running = task::spawn(Self::run(
+            interface,
+            packet_receiver,
+        ));
+
+        (running, sink, stream)
     }
     async fn run(
         interface: Interface,
         mut packet_receiver: Receiver<Packet>,
     ) {
         while let Some(data) = packet_receiver.recv().await {
-            let _ = interface.send(&data);
+            if let Err(e) = interface.send(&data) {
+                log::error!("Failed when sending packet {:?}", e);
+            }
         }
     }
     fn start_thread(interface: Interface, mut packet_sender: Sender<Packet>) {

@@ -53,7 +53,7 @@ impl EthernetInterface {
     pub fn new(ethernet_addr: EthernetAddress, ip_addrs: Vec<IpCidr>, interf: RawsockInterface) -> EthernetInterface {
         let (event_send, event_recv) = mpsc::channel(1);
         let (socket_send, socket_recv) = mpsc::channel(1);
-        let (tx, rx) = interf.into_streams();
+        let (_running, tx, rx) = interf.start();
         let device = FutureDevice::new(tx, rx);
         let neighbor_cache = NeighborCache::new(BTreeMap::new());
         let inner = EthernetInterfaceBuilder::new(device)
@@ -61,7 +61,6 @@ impl EthernetInterface {
             .ip_addrs(ip_addrs)
             .neighbor_cache(neighbor_cache)
             .finalize();
-        let sockets = SocketSet::new();
 
         tokio::spawn(Self::run(EthernetRunner {
             inner,
