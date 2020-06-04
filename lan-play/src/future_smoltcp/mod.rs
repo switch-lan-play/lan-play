@@ -4,39 +4,28 @@ mod socketset;
 
 use socketset::SocketSet;
 use smoltcp::{
-    iface::{EthernetInterfaceBuilder, NeighborCache, EthernetInterface as SmoltcpEthernetInterface, Route, Routes},
+    iface::{EthernetInterfaceBuilder, NeighborCache, EthernetInterface as SmoltcpEthernetInterface, Routes},
     wire::{EthernetAddress, IpCidr, Ipv4Address},
-    socket::{SocketHandle, Socket},
     time::{Instant, Duration},
-    phy::{Device, DeviceCapabilities, RxToken, TxToken},
+    phy::{DeviceCapabilities, RxToken, TxToken},
 };
 use std::collections::BTreeMap;
 use futures::select;
 use futures::prelude::*;
 use tokio::time::{delay_for};
-use tokio::sync::{mpsc, oneshot};
-use tokio::stream::Stream;
+use tokio::sync::mpsc;
 use peekable_receiver::PeekableReceiver;
 use crate::rawsock_socket::RawsockInterface;
 use socket::TcpSocket;
-
-#[derive(Debug)]
-enum Event {
-    // NewSocket(Socket<'static, 'static>, oneshot::Sender<SocketHandle>),
-    // RemoveSocket(SocketHandle),
-    // SocketSet(Box<dyn FnOnce(&mut SocketSet)>)
-}
 
 type Packet = Vec<u8>;
 
 struct EthernetRunner {
     inner: SmoltcpEthernetInterface<'static, 'static, 'static, FutureDevice>,
-    event_recv: mpsc::Receiver<Event>,
     socket_sender: mpsc::Sender<TcpSocket>,
 }
 
 pub struct EthernetInterface {
-    event_send: mpsc::Sender<Event>,
     socket_stream: mpsc::Receiver<TcpSocket>,
 }
 
@@ -52,7 +41,6 @@ pub struct EthernetInterface {
 
 impl EthernetInterface {
     pub fn new(ethernet_addr: EthernetAddress, ip_addrs: Vec<IpCidr>, gateway_ip: Ipv4Address, interf: RawsockInterface) -> EthernetInterface {
-        let (event_send, event_recv) = mpsc::channel(1);
         let (socket_send, socket_recv) = mpsc::channel(1);
         let (_running, tx, rx) = interf.start();
         let device = FutureDevice::new(tx, rx);
@@ -70,12 +58,10 @@ impl EthernetInterface {
 
         tokio::spawn(Self::run(EthernetRunner {
             inner,
-            event_recv,
             socket_sender: socket_send,
         }));
         
         EthernetInterface {
-            event_send,
             socket_stream: socket_recv,
         }
     }
@@ -93,14 +79,13 @@ impl EthernetInterface {
     pub async fn next_socket(&mut self) -> Option<TcpSocket> {
         self.socket_stream.recv().await
     }
-    async fn run(mut args: EthernetRunner) {
+    async fn run(args: EthernetRunner) {
         let default_timeout = Duration::from_millis(1000);
         let EthernetRunner {
-            inner,
-            event_recv,
+            mut inner,
             socket_sender, 
-        } = &mut args;
-        let mut sockets = SocketSet::new();
+        } = args;
+        let mut sockets = SocketSet::new(socket_sender);
 
         loop {
             let start = Instant::now();
@@ -121,9 +106,7 @@ impl EthernetInterface {
             };
 
             if !readiness { continue }
-            if let Some(tcp) = sockets.get_new_tcp() {
-                socket_sender.send(tcp).await.unwrap();
-            }
+            sockets.process().await;
         }
     }
 }
