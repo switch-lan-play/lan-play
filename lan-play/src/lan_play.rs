@@ -15,7 +15,7 @@ pub struct LanPlay<P> {
 
 #[async_trait(?Send)]
 pub trait LanPlayMain {
-    async fn start(&mut self, set: &RawsockInterfaceSet) -> Result<()>;
+    async fn start(&mut self, set: &RawsockInterfaceSet, netif: Option<String>) -> Result<()>;
 }
 
 impl<P> LanPlay<P>
@@ -45,15 +45,22 @@ async fn process_interface(interf: RawsockInterface, ipv4cidr: Ipv4Cidr) {
 
 #[async_trait(?Send)]
 impl<P> LanPlayMain for LanPlay<P> {
-    async fn start(&mut self, set: &RawsockInterfaceSet) -> Result<()> {
-        let (opened, errored) = set.open_all_interface();
-    
-        if opened.len() == 0 {
-            return Err(Error::NoInterface)
-        }
+    async fn start(&mut self, set: &RawsockInterfaceSet, netif: Option<String>) -> Result<()> {
+        let (mut opened, errored) = set.open_all_interface();
     
         for ErrorWithDesc(err, desc) in errored {
             log::warn!("Err: Interface {:?} ({:?}) err {:?}", desc.name, desc.description, err);
+        }
+
+        if let Some(netif) = netif {
+            opened = opened
+                .into_iter()
+                .filter(|i| i.name() == &netif)
+                .collect();
+        }
+    
+        if opened.len() == 0 {
+            return Err(Error::NoInterface)
         }
     
         for interface in &opened {

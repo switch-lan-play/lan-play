@@ -33,7 +33,10 @@ struct Opt {
     gateway_ip: Ipv4Addr,
     /// Prefix length
     #[structopt(short, long, default_value = "16")]
-    prefix_len: u8
+    prefix_len: u8,
+    /// Network interface
+    #[structopt(short="i", long, env = "LP_NETIF")]
+    netif: Option<String>,
 }
 
 lazy_static! {
@@ -67,7 +70,7 @@ async fn main() -> Result<()> {
         ipv4cidr,
     }).await.unwrap();
 
-    lp.start(&set).await?;
+    lp.start(&set, opt.netif).await?;
 
     Ok(())
 }
