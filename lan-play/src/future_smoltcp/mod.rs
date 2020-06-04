@@ -16,17 +16,17 @@ use tokio::time::{delay_for};
 use tokio::sync::mpsc;
 use peekable_receiver::PeekableReceiver;
 use crate::rawsock_socket::RawsockInterface;
-use socket::TcpSocket;
+use socket::Socket;
 
 type Packet = Vec<u8>;
 
 struct EthernetRunner {
     inner: SmoltcpEthernetInterface<'static, 'static, 'static, FutureDevice>,
-    socket_sender: mpsc::Sender<TcpSocket>,
+    socket_sender: mpsc::Sender<Socket>,
 }
 
 pub struct EthernetInterface {
-    socket_stream: mpsc::Receiver<TcpSocket>,
+    socket_stream: mpsc::Receiver<Socket>,
 }
 
 // impl Stream for EthernetInterface {
@@ -76,7 +76,7 @@ impl EthernetInterface {
     // fn remove_socket(&self, handle: SocketHandle) {
     //     self.event_send.clone().try_send(Event::RemoveSocket(handle)).unwrap()
     // }
-    pub async fn next_socket(&mut self) -> Option<TcpSocket> {
+    pub async fn next_socket(&mut self) -> Option<Socket> {
         self.socket_stream.recv().await
     }
     async fn run(args: EthernetRunner) {

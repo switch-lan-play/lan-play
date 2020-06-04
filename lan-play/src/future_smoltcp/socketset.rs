@@ -1,18 +1,18 @@
 use smoltcp::{
-    socket::{self, SocketHandle, SocketSet as InnerSocketSet},
+    socket::{self, SocketHandle, SocketSet as InnerSocketSet, AnySocket},
 };
-use super::socket::{TcpSocket};
+use super::socket::{TcpSocket, Socket};
 use tokio::sync::mpsc;
 
 pub struct SocketSet {
     set: InnerSocketSet<'static, 'static, 'static>,
     tcp_listener: Option<SocketHandle>,
     udp_listener: Option<SocketHandle>,
-    socket_sender: mpsc::Sender<TcpSocket>,
+    socket_sender: mpsc::Sender<Socket>,
 }
 
 impl SocketSet {
-    pub fn new(socket_sender: mpsc::Sender<TcpSocket>) -> SocketSet {
+    pub fn new(socket_sender: mpsc::Sender<Socket>) -> SocketSet {
         let mut set = SocketSet {
             set: InnerSocketSet::new(vec![]),
             tcp_listener: None,
@@ -51,7 +51,10 @@ impl SocketSet {
     }
     pub async fn process(&mut self) {
         if let Some(tcp) = self.get_new_tcp() {
-            self.socket_sender.send(tcp).await.unwrap();
+            self.socket_sender.send(tcp.into()).await.unwrap();
+        }
+        for s in self.set.iter_mut().filter_map(socket::TcpSocket::downcast) {
+            println!("tcp {:?} recv {} send {}", s.state(), s.may_recv(), s.may_send());
         }
     }
 }

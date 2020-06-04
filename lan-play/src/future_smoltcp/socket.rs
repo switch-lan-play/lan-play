@@ -4,9 +4,10 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 use smoltcp::socket::SocketHandle;
 
+#[derive(Debug)]
 pub enum Socket {
-    TcpSocket(TcpSocket),
-    UdpSocket(UdpSocket),
+    Tcp(TcpSocket),
+    Udp(UdpSocket),
 }
 
 #[derive(Debug)]
@@ -14,6 +15,7 @@ pub struct TcpSocket {
     handle: SocketHandle,
 }
 
+#[derive(Debug)]
 pub struct UdpSocket {
 }
 
@@ -26,6 +28,12 @@ impl TcpSocket {
         TcpSocket {
             handle,
         }
+    }
+}
+
+impl Into<Socket> for TcpSocket {
+    fn into(self) -> Socket {
+        Socket::Tcp(self)
     }
 }
 

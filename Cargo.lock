@@ -568,7 +568,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 [[package]]
 name = "smoltcp"
 version = "0.6.0"
-source = "git+https://github.com/switch-lan-play/smoltcp.git?branch=accept-all-0.6.0#d121c517bf5fb7876b733f82a5d3f107f46a1fb9"
+source = "git+https://github.com/switch-lan-play/smoltcp.git?branch=accept-all-0.6.0#36f328d72f22695883ba5983c569e01a66fe63c0"
 dependencies = [
  "bitflags 1.2.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "byteorder 1.3.2 (registry+https://github.com/rust-lang/crates.io-index)",
