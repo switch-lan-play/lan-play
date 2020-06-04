@@ -33,15 +33,16 @@ impl SocketSet {
         &mut self.set
     }
     pub fn get_new_tcp(&mut self) -> Option<TcpSocket> {
-        let handle = match self.tcp_listener.take() {
+        let handle = match self.tcp_listener {
             Some(handle) => handle,
             None => return None,
         };
-        self.preserve_socket();
-        let s = self.set.get::<socket::TcpSocket>(handle);
-        if s.is_listening() {
+        let listening = self.set.get::<socket::TcpSocket>(handle).is_listening();
+        if listening {
             None
         } else {
+            self.tcp_listener.take();
+            self.preserve_socket();
             Some(TcpSocket::new(handle))
         }
     }

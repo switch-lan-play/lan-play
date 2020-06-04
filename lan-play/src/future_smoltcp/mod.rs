@@ -120,6 +120,7 @@ impl EthernetInterface {
                 },
             };
 
+            if !readiness { continue }
             if let Some(tcp) = sockets.get_new_tcp() {
                 socket_sender.send(tcp).await.unwrap();
             }

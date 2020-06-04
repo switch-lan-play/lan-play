@@ -45,6 +45,8 @@ async fn process_interface(interf: RawsockInterface, ipv4cidr: Ipv4Cidr, gateway
     );
     while let Some(socket) = interf.next_socket().await {
         println!("New socket {:?}", socket);
+        tokio::spawn(async move {
+        });
     }
     println!("process_interface done");
 }
