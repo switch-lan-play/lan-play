@@ -74,11 +74,8 @@ impl RawsockInterface {
         interface: Interface,
         mut packet_receiver: Receiver<Packet>,
     ) {
-        loop {
-            let dat = packet_receiver.recv().await;
-            if let Some(data) = dat {
-                let _ = interface.send(&data);
-            }
+        while let Some(data) = packet_receiver.recv().await {
+            let _ = interface.send(&data);
         }
     }
     fn start_thread(interface: Interface, mut packet_sender: Sender<Packet>) {
