@@ -61,6 +61,7 @@ async fn main() -> Result<()> {
 
     let opt = Opt::from_args();
     let ipv4cidr = Ipv4Cidr::new(opt.gateway_ip.into(), opt.prefix_len);
+    let gateway_ip = opt.gateway_ip.into();
 
     let set = RawsockInterfaceSet::new(&RAWSOCK_LIB, ipv4cidr)
         .expect("Could not open any packet capturing library");
@@ -68,6 +69,7 @@ async fn main() -> Result<()> {
     let mut lp = LanPlay::build(LanPlay {
         proxy: DirectProxy::new(),
         ipv4cidr,
+        gateway_ip,
     }).await.unwrap();
 
     lp.start(&set, opt.netif).await?;

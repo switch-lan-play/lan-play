@@ -11,6 +11,7 @@ use smoltcp::{
 pub struct LanPlay<P> {
     pub proxy: P,
     pub ipv4cidr: Ipv4Cidr,
+    pub gateway_ip: Ipv4Address,
 }
 
 #[async_trait(?Send)]
@@ -28,7 +29,7 @@ where
     }
 }
 
-async fn process_interface(interf: RawsockInterface, ipv4cidr: Ipv4Cidr) {
+async fn process_interface(interf: RawsockInterface, ipv4cidr: Ipv4Cidr, gateway_ip: Ipv4Address) {
     // {
     //     let mut tcp_listener = TcpListener::new(&mut interf).await.unwrap();
     //     while let Ok(Some(socket)) = tcp_listener.next().await {
@@ -36,7 +37,12 @@ async fn process_interface(interf: RawsockInterface, ipv4cidr: Ipv4Cidr) {
     //     }
     // }
     let mac = interf.mac();
-    let mut interf = EthernetInterface::new(mac.clone(), vec![ipv4cidr.into()], interf);
+    let mut interf = EthernetInterface::new(
+        mac.clone(), 
+        vec![ipv4cidr.into()],
+        gateway_ip,
+        interf
+    );
     while let Some(socket) = interf.next_socket().await {
         println!("New socket {:?}", socket);
     }
@@ -69,7 +75,7 @@ impl<P> LanPlayMain for LanPlay<P> {
     
         let mut handles: Vec<task::JoinHandle<()>> = vec![];
         for interface in opened {
-            handles.push(task::spawn(process_interface(interface, self.ipv4cidr)));
+            handles.push(task::spawn(process_interface(interface, self.ipv4cidr, self.gateway_ip)));
         }
         for t in handles {
             t.await.map_err(|e| Error::Other(format!("Join error {:?}", e)))?;

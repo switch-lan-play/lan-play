@@ -4,8 +4,8 @@ mod socketset;
 
 use socketset::SocketSet;
 use smoltcp::{
-    iface::{EthernetInterfaceBuilder, NeighborCache, EthernetInterface as SmoltcpEthernetInterface},
-    wire::{EthernetAddress, IpCidr},
+    iface::{EthernetInterfaceBuilder, NeighborCache, EthernetInterface as SmoltcpEthernetInterface, Route, Routes},
+    wire::{EthernetAddress, IpCidr, Ipv4Address},
     socket::{SocketHandle, Socket},
     time::{Instant, Duration},
     phy::{Device, DeviceCapabilities, RxToken, TxToken},
@@ -18,6 +18,7 @@ use tokio::sync::{mpsc, oneshot};
 use tokio::stream::Stream;
 use peekable_receiver::PeekableReceiver;
 use crate::rawsock_socket::RawsockInterface;
+use socket::TcpSocket;
 
 #[derive(Debug)]
 enum Event {
@@ -31,12 +32,12 @@ type Packet = Vec<u8>;
 struct EthernetRunner {
     inner: SmoltcpEthernetInterface<'static, 'static, 'static, FutureDevice>,
     event_recv: mpsc::Receiver<Event>,
+    socket_sender: mpsc::Sender<TcpSocket>,
 }
 
 pub struct EthernetInterface {
     event_send: mpsc::Sender<Event>,
-    socket_sender: mpsc::Sender<()>,
-    socket_stream: mpsc::Receiver<()>,
+    socket_stream: mpsc::Receiver<TcpSocket>,
 }
 
 // impl Stream for EthernetInterface {
@@ -50,26 +51,31 @@ pub struct EthernetInterface {
 // }
 
 impl EthernetInterface {
-    pub fn new(ethernet_addr: EthernetAddress, ip_addrs: Vec<IpCidr>, interf: RawsockInterface) -> EthernetInterface {
+    pub fn new(ethernet_addr: EthernetAddress, ip_addrs: Vec<IpCidr>, gateway_ip: Ipv4Address, interf: RawsockInterface) -> EthernetInterface {
         let (event_send, event_recv) = mpsc::channel(1);
         let (socket_send, socket_recv) = mpsc::channel(1);
         let (_running, tx, rx) = interf.start();
         let device = FutureDevice::new(tx, rx);
         let neighbor_cache = NeighborCache::new(BTreeMap::new());
+        let mut routes = Routes::new(BTreeMap::new());
+        routes.add_default_ipv4_route(gateway_ip).unwrap();
+
         let inner = EthernetInterfaceBuilder::new(device)
             .ethernet_addr(ethernet_addr)
             .ip_addrs(ip_addrs)
             .neighbor_cache(neighbor_cache)
+            .any_ip(true)
+            .routes(routes)
             .finalize();
 
         tokio::spawn(Self::run(EthernetRunner {
             inner,
             event_recv,
+            socket_sender: socket_send,
         }));
         
         EthernetInterface {
             event_send,
-            socket_sender: socket_send,
             socket_stream: socket_recv,
         }
     }
@@ -84,12 +90,16 @@ impl EthernetInterface {
     // fn remove_socket(&self, handle: SocketHandle) {
     //     self.event_send.clone().try_send(Event::RemoveSocket(handle)).unwrap()
     // }
-    pub async fn next_socket(&mut self) -> Option<()> {
+    pub async fn next_socket(&mut self) -> Option<TcpSocket> {
         self.socket_stream.recv().await
     }
     async fn run(mut args: EthernetRunner) {
         let default_timeout = Duration::from_millis(1000);
-        let EthernetRunner { inner, event_recv } = &mut args;
+        let EthernetRunner {
+            inner,
+            event_recv,
+            socket_sender, 
+        } = &mut args;
         let mut sockets = SocketSet::new();
 
         loop {
@@ -110,8 +120,8 @@ impl EthernetInterface {
                 },
             };
 
-            if readiness {
-
+            if let Some(tcp) = sockets.get_new_tcp() {
+                socket_sender.send(tcp).await.unwrap();
             }
         }
     }
