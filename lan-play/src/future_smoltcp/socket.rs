@@ -25,6 +25,12 @@ pub struct SocketLeaf {
     tx: mpsc::Sender<Packet>,
 }
 
+impl SocketLeaf {
+    pub async fn send<P: Into<Packet>>(&mut self, packet: P) {
+        self.tx.send(packet.into()).await.unwrap()
+    }
+}
+
 impl TcpSocket {
     pub(super) fn new(handle: SocketHandle) -> (Self, SocketLeaf) {
         let (tx, rx) = mpsc::channel(10);

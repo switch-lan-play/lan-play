@@ -50,8 +50,10 @@ async fn process_interface(interf: RawsockInterface, ipv4cidr: Ipv4Cidr, gateway
         let _: JoinHandle<anyhow::Result<_>> = tokio::spawn(async move {
             match socket {
                 Socket::Tcp(mut socket) => {
-                    let byte = socket.read_u8().await?;
-                    println!("{:?}: {}", socket, byte)
+                    loop {
+                        let byte = socket.read_u8().await?;
+                        println!("{:?}: {}", socket, byte)
+                    }
                 }
                 _ => {
                     println!("udp");

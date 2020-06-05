@@ -1,14 +1,16 @@
 use smoltcp::{
     socket::{self, SocketHandle, SocketSet as InnerSocketSet, AnySocket},
 };
-use super::socket::{TcpSocket, Socket};
+use super::socket::{TcpSocket, Socket, SocketLeaf};
 use tokio::sync::mpsc;
+use std::collections::HashMap;
 
 pub struct SocketSet {
     set: InnerSocketSet<'static, 'static, 'static>,
     tcp_listener: Option<SocketHandle>,
     udp_listener: Option<SocketHandle>,
     socket_sender: mpsc::Sender<Socket>,
+    leaf_map: HashMap<SocketHandle, SocketLeaf>,
 }
 
 impl SocketSet {
@@ -18,6 +20,7 @@ impl SocketSet {
             tcp_listener: None,
             udp_listener: None,
             socket_sender,
+            leaf_map: HashMap::new(),
         };
         set.preserve_socket();
         set
@@ -46,15 +49,31 @@ impl SocketSet {
         } else {
             self.tcp_listener.take();
             self.preserve_socket();
-            Some(TcpSocket::new(handle).0)
+            let (socket, leaf) = TcpSocket::new(handle);
+            self.leaf_map.insert(handle, leaf);
+            Some(socket)
         }
     }
-    pub async fn process(&mut self) {
+    pub async fn process(&mut self)  {
         if let Some(tcp) = self.get_new_tcp() {
             self.socket_sender.send(tcp.into()).await.unwrap();
         }
-        for s in self.set.iter_mut().filter_map(socket::TcpSocket::downcast) {
-            println!("tcp {:?} recv {} send {}", s.state(), s.may_recv(), s.may_send());
+        for mut s in self.set.iter_mut().filter_map(socket::TcpSocket::downcast) {
+            if s.may_recv() {
+                println!("may_recv {:?}", s.handle());
+                let data = s.recv(|buffer| {
+                    let data = buffer.to_owned();
+                    (data.len(), data)
+                }).unwrap();
+                println!("data {:?}", data);
+                if let Some(leaf) = self.leaf_map.get_mut(&s.handle()) {
+                    leaf.send(data).await;
+                } else {
+                    println!("no leaf");
+                }
+                
+            }
+            // println!("tcp {:?} recv {} send {}", s.state(), s.may_recv(), s.may_send());
         }
     }
 }

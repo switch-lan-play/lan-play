@@ -12,7 +12,7 @@ use smoltcp::{
 use std::collections::BTreeMap;
 use futures::select;
 use futures::prelude::*;
-use tokio::time::{delay_for};
+use tokio::time::delay_for;
 use tokio::sync::mpsc;
 use peekable_receiver::PeekableReceiver;
 use crate::rawsock_socket::RawsockInterface;
@@ -28,16 +28,6 @@ struct EthernetRunner {
 pub struct EthernetInterface {
     socket_stream: mpsc::Receiver<Socket>,
 }
-
-// impl Stream for EthernetInterface {
-//     type Item = ESocket;
-//     fn poll_next(
-//         self: Pin<&mut Self>,
-//         cx: &mut Context<'_>,
-//     ) -> Poll<Option<Self::Item>> {
-
-//     }
-// }
 
 impl EthernetInterface {
     pub fn new(ethernet_addr: EthernetAddress, ip_addrs: Vec<IpCidr>, gateway_ip: Ipv4Address, interf: RawsockInterface) -> EthernetInterface {
@@ -65,17 +55,6 @@ impl EthernetInterface {
             socket_stream: socket_recv,
         }
     }
-    // async fn new_socket<T>(&self, socket: T) -> SocketHandle
-    // where
-    //     T: Into<Socket<'static, 'static>>,
-    // {
-    //     let (tx, rx) = oneshot::channel();
-    //     self.event_send.clone().send(Event::NewSocket(socket.into(), tx)).await;
-    //     rx.await.unwrap()
-    // }
-    // fn remove_socket(&self, handle: SocketHandle) {
-    //     self.event_send.clone().try_send(Event::RemoveSocket(handle)).unwrap()
-    // }
     pub async fn next_socket(&mut self) -> Option<Socket> {
         self.socket_stream.recv().await
     }
