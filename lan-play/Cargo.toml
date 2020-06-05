@@ -5,6 +5,7 @@ authors = ["spacemeowx2 <spacemeowx2@gmail.com>"]
 edition = "2018"
 
 [dependencies]
+bytes = "0.5"
 tokio = { version = "0.2.21", features = ["full"] }
 futures = "0.3"
 rawsock = { version = "0.3", path = "../rawsock" }
@@ -17,6 +18,7 @@ lazy_static = "1.4.0"
 async-trait = "0.1"
 structopt = "0.3"
 dotenv = "0.15"
+anyhow = "1.0"
 
 [dependencies.smoltcp]
 # version = "0.5.0"

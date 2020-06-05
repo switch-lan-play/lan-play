@@ -46,7 +46,7 @@ impl SocketSet {
         } else {
             self.tcp_listener.take();
             self.preserve_socket();
-            Some(TcpSocket::new(handle))
+            Some(TcpSocket::new(handle).0)
         }
     }
     pub async fn process(&mut self) {

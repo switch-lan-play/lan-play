@@ -1,5 +1,4 @@
 #[macro_use] extern crate cfg_if;
-#[macro_use] extern crate futures;
 #[macro_use] extern crate lazy_static;
 #[macro_use] extern crate async_trait;
 
@@ -11,14 +10,12 @@ mod error;
 mod future_smoltcp;
 
 use rawsock_socket::RawsockInterfaceSet;
-use smoltcp::{
-    wire::{Ipv4Cidr, Ipv4Address}
-};
+use smoltcp::wire::Ipv4Cidr;
 use rawsock::traits::Library;
 use lan_play::LanPlay;
 use proxy::DirectProxy;
 use error::Result;
-use std::net::{Ipv4Addr, AddrParseError};
+use std::net::Ipv4Addr;
 use structopt::StructOpt;
 
 // fn parse_ip(src: &str) -> std::result::Result<Ipv4Addr, AddrParseError> {

@@ -16,7 +16,7 @@ use tokio::time::{delay_for};
 use tokio::sync::mpsc;
 use peekable_receiver::PeekableReceiver;
 use crate::rawsock_socket::RawsockInterface;
-use socket::Socket;
+pub use socket::{Socket, TcpSocket, UdpSocket};
 
 type Packet = Vec<u8>;
 

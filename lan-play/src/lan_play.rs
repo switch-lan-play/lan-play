@@ -2,11 +2,13 @@ use crate::proxy::Proxy;
 use crate::error::{Error, Result};
 use crate::rawsock_socket::{ErrorWithDesc, RawsockInterfaceSet, RawsockInterface};
 use crate::future_smoltcp::EthernetInterface;
+use crate::future_smoltcp::Socket;
 use tokio::task;
-use tokio::stream::StreamExt;
 use smoltcp::{
     wire::{Ipv4Cidr, Ipv4Address}
 };
+use tokio::prelude::*;
+use tokio::task::JoinHandle;
 
 pub struct LanPlay<P> {
     pub proxy: P,
@@ -45,7 +47,17 @@ async fn process_interface(interf: RawsockInterface, ipv4cidr: Ipv4Cidr, gateway
     );
     while let Some(socket) = interf.next_socket().await {
         println!("New socket {:?}", socket);
-        tokio::spawn(async move {
+        let _: JoinHandle<anyhow::Result<_>> = tokio::spawn(async move {
+            match socket {
+                Socket::Tcp(mut socket) => {
+                    let byte = socket.read_u8().await?;
+                    println!("{:?}: {}", socket, byte)
+                }
+                _ => {
+                    println!("udp");
+                }
+            }
+            Ok(())
         });
     }
     println!("process_interface done");
