@@ -52,7 +52,8 @@ async fn process_interface(interf: RawsockInterface, ipv4cidr: Ipv4Cidr, gateway
                 Socket::Tcp(mut socket) => {
                     loop {
                         let byte = socket.read_u8().await?;
-                        println!("{:?}: {}", socket, byte)
+                        println!("{:?}: {}", socket, byte);
+                        socket.write_u8(byte).await?;
                     }
                 }
                 _ => {

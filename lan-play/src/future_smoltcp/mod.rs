@@ -16,13 +16,16 @@ use tokio::time::delay_for;
 use tokio::sync::mpsc;
 use peekable_receiver::PeekableReceiver;
 use crate::rawsock_socket::RawsockInterface;
-pub use socket::{Socket, TcpSocket, UdpSocket};
+pub use socket::{Socket, TcpSocket, UdpSocket, SocketHandle};
 
 type Packet = Vec<u8>;
+pub type OutPacket = (SocketHandle, Packet);
 
 struct EthernetRunner {
     inner: SmoltcpEthernetInterface<'static, 'static, 'static, FutureDevice>,
     socket_sender: mpsc::Sender<Socket>,
+    packet_sender: mpsc::Sender<OutPacket>,
+    packet_receiver: mpsc::Receiver<OutPacket>,
 }
 
 pub struct EthernetInterface {
@@ -32,6 +35,8 @@ pub struct EthernetInterface {
 impl EthernetInterface {
     pub fn new(ethernet_addr: EthernetAddress, ip_addrs: Vec<IpCidr>, gateway_ip: Ipv4Address, interf: RawsockInterface) -> EthernetInterface {
         let (socket_send, socket_recv) = mpsc::channel(1);
+        let (packet_sender, packet_receiver) = mpsc::channel(1);
+
         let (_running, tx, rx) = interf.start();
         let device = FutureDevice::new(tx, rx);
         let neighbor_cache = NeighborCache::new(BTreeMap::new());
@@ -49,6 +54,8 @@ impl EthernetInterface {
         tokio::spawn(Self::run(EthernetRunner {
             inner,
             socket_sender: socket_send,
+            packet_sender,
+            packet_receiver,
         }));
         
         EthernetInterface {
@@ -62,9 +69,11 @@ impl EthernetInterface {
         let default_timeout = Duration::from_millis(1000);
         let EthernetRunner {
             mut inner,
-            socket_sender, 
+            socket_sender,
+            packet_sender,
+            mut packet_receiver,
         } = args;
-        let mut sockets = SocketSet::new(socket_sender);
+        let mut sockets = SocketSet::new(socket_sender, packet_sender);
 
         loop {
             let start = Instant::now();
@@ -74,6 +83,13 @@ impl EthernetInterface {
             select! {
                 _ = delay_for(deadline.into()).fuse() => {},
                 _ = device.receiver.peek().fuse() => {},
+                item = packet_receiver.recv().fuse() => {
+                    if let Some((handle, packet)) = item {
+                        sockets.send(handle, packet).await;
+                    } else {
+                        break
+                    }
+                },
             }
             let end = Instant::now();
             let readiness = match inner.poll(sockets.as_set_mut(), end) {

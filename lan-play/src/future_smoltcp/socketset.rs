@@ -1,7 +1,7 @@
 use smoltcp::{
     socket::{self, SocketHandle, SocketSet as InnerSocketSet, AnySocket},
 };
-use super::socket::{TcpSocket, Socket, SocketLeaf};
+use super::{OutPacket, socket::{TcpSocket, Socket, SocketLeaf}};
 use tokio::sync::mpsc;
 use std::collections::HashMap;
 
@@ -10,16 +10,18 @@ pub struct SocketSet {
     tcp_listener: Option<SocketHandle>,
     udp_listener: Option<SocketHandle>,
     socket_sender: mpsc::Sender<Socket>,
+    packet_sender: mpsc::Sender<OutPacket>,
     leaf_map: HashMap<SocketHandle, SocketLeaf>,
 }
 
 impl SocketSet {
-    pub fn new(socket_sender: mpsc::Sender<Socket>) -> SocketSet {
+    pub fn new(socket_sender: mpsc::Sender<Socket>, packet_sender: mpsc::Sender<OutPacket>) -> SocketSet {
         let mut set = SocketSet {
             set: InnerSocketSet::new(vec![]),
             tcp_listener: None,
             udp_listener: None,
             socket_sender,
+            packet_sender,
             leaf_map: HashMap::new(),
         };
         set.preserve_socket();
@@ -49,10 +51,14 @@ impl SocketSet {
         } else {
             self.tcp_listener.take();
             self.preserve_socket();
-            let (socket, leaf) = TcpSocket::new(handle);
+            let (socket, leaf) = TcpSocket::new(handle, self.packet_sender.clone());
             self.leaf_map.insert(handle, leaf);
             Some(socket)
         }
+    }
+    pub async fn send(&mut self, handle: SocketHandle, data: Vec<u8>) {
+        println!("TODO: socketset.send");
+        let socket = self.set.get::<socket::TcpSocket>(handle);
     }
     pub async fn process(&mut self)  {
         if let Some(tcp) = self.get_new_tcp() {
