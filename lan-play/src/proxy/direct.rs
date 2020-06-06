@@ -50,7 +50,3 @@ impl Proxy for DirectProxy {
         (&mut self.join).await.unwrap()
     }
 }
-
-pub fn new_proxy() -> DirectProxy {
-    DirectProxy::new()
-}
