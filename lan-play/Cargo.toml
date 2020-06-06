@@ -29,7 +29,7 @@ features = [
     "std", "log",
     "ethernet",
     "proto-ipv4", "proto-ipv6",
-    "socket-tcp", "socket-udp", "socket-icmp",
+    "socket-tcp", "socket-raw", "socket-icmp",
     "verbose",
     "socket-accept-all", "arp-fake-subnet"
 ]

@@ -53,7 +53,7 @@ fn open_best_library() -> Result<Box<dyn Library>> {
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    dotenv::dotenv().ok();
+    dotenv::dotenv().expect("Failed to parse .env");
     env_logger::init();
 
     let opt = Opt::from_args();

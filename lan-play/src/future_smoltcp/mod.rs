@@ -1,6 +1,7 @@
 mod peekable_receiver;
 mod socket;
 mod socketset;
+mod raw_udp;
 
 use socketset::SocketSet;
 use smoltcp::{
@@ -96,7 +97,7 @@ impl EthernetInterface {
                 Ok(b) => b,
                 Err(e) => {
                     log::error!("poll error {:?}", e);
-                    return;
+                    true
                 },
             };
 

@@ -1,14 +1,15 @@
 use smoltcp::{
-    socket::{self, SocketHandle, SocketSet as InnerSocketSet, AnySocket},
+    socket::{self, SocketHandle, SocketSet as InnerSocketSet, AnySocket}, phy::ChecksumCapabilities,
 };
-use super::{OutPacket, socket::{TcpSocket, Socket, SocketLeaf}};
+use super::raw_udp::parse_udp;
+use super::{OutPacket, socket::{TcpSocket, UdpSocket, Socket, SocketLeaf}};
 use tokio::sync::mpsc;
 use std::collections::HashMap;
 
 pub struct SocketSet {
     set: InnerSocketSet<'static, 'static, 'static>,
     tcp_listener: Option<SocketHandle>,
-    udp_listener: Option<SocketHandle>,
+    raw_socket: SocketHandle,
     socket_sender: mpsc::Sender<Socket>,
     packet_sender: mpsc::Sender<OutPacket>,
     leaf_map: HashMap<SocketHandle, SocketLeaf>,
@@ -16,10 +17,12 @@ pub struct SocketSet {
 
 impl SocketSet {
     pub fn new(socket_sender: mpsc::Sender<Socket>, packet_sender: mpsc::Sender<OutPacket>) -> SocketSet {
+        let mut nset = InnerSocketSet::new(vec![]);
+        let raw_socket = nset.add(new_raw_socket());
         let mut set = SocketSet {
-            set: InnerSocketSet::new(vec![]),
+            set: nset,
             tcp_listener: None,
-            udp_listener: None,
+            raw_socket,
             socket_sender,
             packet_sender,
             leaf_map: HashMap::new(),
@@ -31,10 +34,6 @@ impl SocketSet {
         if self.tcp_listener.is_none() {
             let handle = self.set.add(new_tcp_socket());
             self.tcp_listener = Some(handle)
-        }
-        if self.udp_listener.is_none() {
-            let handle = self.set.add(new_udp_socket());
-            self.udp_listener = Some(handle)
         }
     }
     pub fn as_set_mut(&mut self) -> &mut InnerSocketSet<'static, 'static, 'static> {
@@ -63,6 +62,14 @@ impl SocketSet {
     pub async fn process(&mut self)  {
         if let Some(tcp) = self.get_new_tcp() {
             self.socket_sender.send(tcp.into()).await.unwrap();
+        }
+        {
+            let mut raw = self.set.get::<socket::RawSocket>(self.raw_socket);
+            if raw.can_recv() {
+                let data = raw.recv().unwrap();
+                let udp = parse_udp(data, &ChecksumCapabilities::default());
+                println!("udp {:?}", udp);
+            }
         }
         for mut s in self.set.iter_mut().filter_map(socket::TcpSocket::downcast) {
             if s.may_recv() {
@@ -95,12 +102,15 @@ fn new_tcp_socket() -> socket::TcpSocket<'static> {
     tcp
 }
 
-fn new_udp_socket() -> socket::UdpSocket<'static, 'static> {
-    use smoltcp::socket::{UdpSocket, UdpSocketBuffer, UdpPacketMetadata};
-    let rx_buffer = UdpSocketBuffer::new(vec![UdpPacketMetadata::EMPTY; 4], vec![0; 2048]);
-    let tx_buffer = UdpSocketBuffer::new(vec![UdpPacketMetadata::EMPTY; 4], vec![0; 2048]);
-    let mut udp = UdpSocket::new(rx_buffer, tx_buffer);
-    udp.set_accept_all(true);
+fn new_raw_socket() -> socket::RawSocket<'static, 'static> {
+    use smoltcp::socket::{RawSocket, RawSocketBuffer, RawPacketMetadata};
+    use smoltcp::wire::{IpVersion, IpProtocol};
+    let rx_buffer = RawSocketBuffer::new(vec![RawPacketMetadata::EMPTY; 4], vec![0; 2048]);
+    let tx_buffer = RawSocketBuffer::new(vec![RawPacketMetadata::EMPTY; 4], vec![0; 2048]);
+    let raw = RawSocket::new(
+        IpVersion::Ipv4, IpProtocol::Udp,
+        rx_buffer, tx_buffer
+    );
 
-    udp
+    raw
 }
