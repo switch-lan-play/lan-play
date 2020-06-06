@@ -35,25 +35,33 @@ mod tests {
     use tokio::net::TcpListener;
     use tokio::prelude::*;
 
-    async fn server_tcp() -> u16 {
+    async fn server_tcp() -> (TcpListener, u16) {
         let mut server = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let port = server.local_addr().unwrap().port();
-        tokio::spawn(async move {
-            let (mut socket, _) = server.accept().await.unwrap();
-            socket.write_all(b"hi").await.unwrap();
-        });
-        port
+        (server, port)
     }
 
     #[tokio::test]
-    async fn test_direct_proxy() {
-        let port = server_tcp().await;
+    async fn test_direct_proxy() -> tokio::io::Result<()> {
+        let (mut server, port) = server_tcp().await;
+        let join = tokio::spawn(async move {
+            let (mut socket, _) = server.accept().await?;
+            let mut buf = [0u8; 5];
+            socket.read_exact(&mut buf).await?;
+            assert_eq!(&buf, b"hello");
+            socket.write_all(b"world").await?;
+            Ok::<_, tokio::io::Error>(())
+        });
         let mut proxy: BoxProxy = DirectProxy::new();
         let mut tcp = proxy.new_tcp(
             SocketAddr::new("127.0.0.1".parse().unwrap(), port)
         ).await.unwrap();
-        let mut buf = [0u8; 2];
-        tcp.read_exact(&mut buf).await.unwrap();
-        assert_eq!(&buf, b"hi");
+        let mut buf = [0u8; 5];
+        tcp.write_all(b"hello").await?;
+        tcp.read_exact(&mut buf).await?;
+        assert_eq!(&buf, b"world");
+
+        join.await.unwrap().unwrap();
+        Ok(())
     }
 }
