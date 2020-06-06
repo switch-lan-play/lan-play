@@ -56,7 +56,7 @@ impl SocketSet {
         }
     }
     pub async fn send(&mut self, handle: SocketHandle, data: Vec<u8>) {
-        println!("TODO: socketset.send");
+        todo!("socketset.send");
         let socket = self.set.get::<socket::TcpSocket>(handle);
     }
     pub async fn process(&mut self)  {

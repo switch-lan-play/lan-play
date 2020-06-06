@@ -168,8 +168,7 @@ where
             Ok(packet) => Some(
                 (FutureRxToken(packet), FutureTxToken(self.sender.clone()))
             ),
-            // TODO handle receiver closed
-            _ => None
+            _ => todo!("handle receiver closed")
         }
     }
     fn transmit(&'d mut self) -> Option<Self::TxToken> {
