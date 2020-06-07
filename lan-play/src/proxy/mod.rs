@@ -1,6 +1,7 @@
 pub use std::io;
 pub use std::net::{SocketAddr, IpAddr, Ipv4Addr};
 pub use self::direct::DirectProxy;
+pub use self::socks5::Socks5Proxy;
 
 mod direct;
 mod socks5;
@@ -39,6 +40,7 @@ mod test {
     use tokio::io::{split, copy};
     use tokio::net::TcpListener;
     use tokio::prelude::*;
+    use super::socks5::test::socks5_server;
 
     async fn server_tcp() -> (TcpListener, u16) {
         let server = TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -67,6 +69,33 @@ mod test {
         tcp.shutdown().await?;
 
         join.await.unwrap().unwrap();
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_socks5_proxy() -> anyhow::Result<()> {
+        let (socks5, socks5_port) = socks5_server().await;
+
+        let (mut server, port) = server_tcp().await;
+        let join = tokio::spawn(async move {
+            let (socket, _) = server.accept().await?;
+            let (mut reader, mut writer) = split(socket);
+            copy(&mut reader, &mut writer).await?;
+            Ok::<_, tokio::io::Error>(())
+        });
+        let mut proxy: BoxProxy = Socks5Proxy::new(([127, 0, 0, 1], socks5_port).into(), None);
+        let mut tcp = proxy.new_tcp(
+            SocketAddr::new([127, 0, 0, 1].into(), port)
+        ).await.unwrap();
+
+        let mut buf = [0u8; 5];
+        tcp.write_all(b"hello").await?;
+        tcp.read_exact(&mut buf).await?;
+        assert_eq!(&buf, b"hello");
+        tcp.shutdown().await?;
+
+        join.await??;
+        socks5.await?;
         Ok(())
     }
 }

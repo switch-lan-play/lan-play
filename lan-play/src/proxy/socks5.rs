@@ -76,12 +76,23 @@ impl Proxy for Socks5Proxy {
 
 #[cfg(test)]
 pub mod test {
-    use fast_socks5::{
-        server::{Config, SimpleUserPassword, Socks5Server, Socks5Socket},
-        Result, SocksError,
-    };
+    use fast_socks5::server::{Config, Socks5Socket};
+    use async_std::task::JoinHandle;
+    use std::io;
+    use async_std::net::TcpListener;
 
-    pub fn socks5_server() {
-
+    pub async fn socks5_server() -> (JoinHandle<io::Result<()>>, u16) {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let config = Config::default();
+        (async_std::task::spawn(async move {
+            let (socket, _) = listener.accept().await?;
+            let socket = Socks5Socket::new(socket, std::sync::Arc::new(config));
+            socket
+                .upgrade_to_socks5()
+                .await
+                .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+            Ok(())
+        }), port)
     }
 }
