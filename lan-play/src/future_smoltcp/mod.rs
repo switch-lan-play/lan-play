@@ -14,7 +14,7 @@ use std::collections::BTreeMap;
 use futures::select;
 use futures::prelude::*;
 use tokio::time::delay_for;
-use tokio::sync::mpsc;
+use tokio::sync::mpsc::{self, error::TryRecvError};
 use peekable_receiver::PeekableReceiver;
 use crate::rawsock_socket::RawsockInterface;
 pub use socket::{Socket, TcpSocket, UdpSocket, SocketHandle};
@@ -168,7 +168,8 @@ where
             Ok(packet) => Some(
                 (FutureRxToken(packet), FutureTxToken(self.sender.clone()))
             ),
-            _ => todo!("handle receiver closed")
+            Err(TryRecvError::Empty) => None,
+            Err(TryRecvError::Closed) => todo!("handle receiver closed"),
         }
     }
     fn transmit(&'d mut self) -> Option<Self::TxToken> {
