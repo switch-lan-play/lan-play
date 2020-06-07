@@ -38,12 +38,18 @@ pub trait Proxy
 mod test {
     use super::*;
     use tokio::io::{split, copy};
-    use tokio::net::TcpListener;
+    use tokio::net::{TcpListener, UdpSocket};
     use tokio::prelude::*;
     use super::socks5::test::socks5_server;
 
     async fn server_tcp() -> (TcpListener, u16) {
         let server = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = server.local_addr().unwrap().port();
+        (server, port)
+    }
+
+    async fn server_udp() -> (UdpSocket, u16) {
+        let server = UdpSocket::bind("127.0.0.1:0").await.unwrap();
         let port = server.local_addr().unwrap().port();
         (server, port)
     }
@@ -67,6 +73,31 @@ mod test {
         tcp.read_exact(&mut buf).await?;
         assert_eq!(&buf, b"hello");
         tcp.shutdown().await?;
+
+        join.await.unwrap().unwrap();
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_direct_proxy_udp() -> tokio::io::Result<()> {
+        let (mut server, port) = server_udp().await;
+        let join = tokio::spawn(async move {
+            let mut buf = [0u8; 65536];
+            let (size, addr) = server.recv_from(&mut buf).await?;
+            server.send_to(&buf[..size], addr).await?;
+            Ok::<_, tokio::io::Error>(())
+        });
+        let mut proxy: BoxProxy = DirectProxy::new();
+        let mut udp = proxy.new_udp(
+            *ANY_ADDR
+        ).await.unwrap();
+        let target = SocketAddr::new("127.0.0.1".parse().unwrap(), port);
+
+        let mut buf = [0u8; 65536];
+        udp.send_to(b"hello", target).await?;
+        let (size, addr) = udp.recv_from(&mut buf).await?;
+        assert_eq!(addr, target);
+        assert_eq!(buf[..size], b"hello"[..]);
 
         join.await.unwrap().unwrap();
         Ok(())
