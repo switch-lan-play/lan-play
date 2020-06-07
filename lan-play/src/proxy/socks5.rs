@@ -56,7 +56,7 @@ impl Proxy for Socks5Proxy {
         let mut socket = TcpStream::connect(self.server.clone()).await?;
         connect(&mut socket, addr, self.auth.clone())
             .await
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+            .map_err(map_socks5_err)?;
         Ok(Box::new(socket))
     }
     async fn new_udp(&mut self, addr: SocketAddr) -> io::Result<BoxUdp> {
@@ -65,11 +65,23 @@ impl Proxy for Socks5Proxy {
         let udp = SocksDatagram
             ::associate(proxy_stream, socket, self.auth.clone(), None::<SocketAddr>)
             .await
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
-            
+            .map_err(map_socks5_err)?;
+
         Ok(Box::new(udp))
     }
     async fn join(&mut self) -> () {
         (&mut self.join).await.unwrap()
+    }
+}
+
+#[cfg(test)]
+pub mod test {
+    use fast_socks5::{
+        server::{Config, SimpleUserPassword, Socks5Server, Socks5Socket},
+        Result, SocksError,
+    };
+
+    pub fn socks5_server() {
+
     }
 }

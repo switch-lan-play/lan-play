@@ -34,7 +34,7 @@ pub trait Proxy
 }
 
 #[cfg(test)]
-mod tests {
+mod test {
     use super::*;
     use tokio::io::{split, copy};
     use tokio::net::TcpListener;
