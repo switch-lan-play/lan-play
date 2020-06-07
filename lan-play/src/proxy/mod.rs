@@ -1,5 +1,5 @@
 pub use std::io;
-pub use std::net::SocketAddr;
+pub use std::net::{SocketAddr, IpAddr, Ipv4Addr};
 pub use self::direct::DirectProxy;
 
 mod direct;
@@ -7,6 +7,9 @@ mod socks5;
 pub type BoxTcp = Box<dyn socket::Tcp + Unpin>;
 pub type BoxUdp = Box<dyn socket::Udp + Unpin>;
 pub type BoxProxy = Box<dyn Proxy + Unpin>;
+lazy_static! {
+    pub static ref ANY_ADDR: SocketAddr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 0);
+}
 
 pub mod socket {
     use std::net::SocketAddr;

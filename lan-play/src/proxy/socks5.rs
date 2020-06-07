@@ -61,7 +61,7 @@ impl Proxy for Socks5Proxy {
     }
     async fn new_udp(&mut self, addr: SocketAddr) -> io::Result<BoxUdp> {
         let proxy_stream = TcpStream::connect(self.server.clone()).await?;
-        let socket = UdpSocket::bind("0.0.0.0:0").await?;
+        let socket = UdpSocket::bind(addr).await?;
         let udp = SocksDatagram
             ::associate(proxy_stream, socket, self.auth.clone(), None::<SocketAddr>)
             .await
