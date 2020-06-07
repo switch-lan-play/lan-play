@@ -3,6 +3,7 @@ pub use std::net::SocketAddr;
 pub use self::direct::DirectProxy;
 
 mod direct;
+mod socks5;
 pub type BoxTcp = Box<dyn socket::Tcp + Unpin>;
 pub type BoxUdp = Box<dyn socket::Udp + Unpin>;
 pub type BoxProxy = Box<dyn Proxy + Unpin>;
