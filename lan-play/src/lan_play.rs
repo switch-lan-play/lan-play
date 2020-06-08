@@ -62,7 +62,7 @@ async fn process_interface(interf: RawsockInterface, ipv4cidr: Ipv4Cidr, gateway
     );
     while let Some(socket) = net.next_socket().await {
         println!("New socket {:?}", socket);
-        let _: JoinHandle<anyhow::Result<_>> = tokio::spawn(async move {
+        let _ = tokio::spawn(async move {
             match socket {
                 Socket::Tcp(mut socket) => {
                     loop {
@@ -75,7 +75,7 @@ async fn process_interface(interf: RawsockInterface, ipv4cidr: Ipv4Cidr, gateway
                     println!("udp");
                 }
             }
-            Ok(())
+            anyhow::Result::<()>::Ok(())
         });
     }
     println!("process_interface done");

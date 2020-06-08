@@ -5,6 +5,7 @@ use super::raw_udp::parse_udp;
 use super::{OutPacket, socket::{TcpSocket, UdpSocket, Socket, SocketLeaf}};
 use tokio::sync::mpsc;
 use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
 
 pub struct SocketSet {
     set: InnerSocketSet<'static, 'static, 'static>,
@@ -55,13 +56,15 @@ impl SocketSet {
             Some(socket)
         }
     }
-    pub async fn send(&mut self, handle: SocketHandle, data: Vec<u8>) {
+    pub fn send(&mut self, handle: SocketHandle, data: Vec<u8>) {
         todo!("socketset.send");
         let socket = self.set.get::<socket::TcpSocket>(handle);
     }
-    pub async fn process(&mut self)  {
+    pub fn process(&mut self)  {
         if let Some(tcp) = self.get_new_tcp() {
-            self.socket_sender.send(tcp.into()).await.unwrap();
+            self.socket_sender
+                .try_send(tcp.into())
+                .expect("FIXME  can not send tcp socket");
         }
         {
             let mut raw = self.set.get::<socket::RawSocket>(self.raw_socket);
@@ -80,11 +83,10 @@ impl SocketSet {
                 }).unwrap();
                 println!("data {:?}", data);
                 if let Some(leaf) = self.leaf_map.get_mut(&s.handle()) {
-                    leaf.send(data).await;
+                    leaf.try_send(data);
                 } else {
                     println!("no leaf");
                 }
-                
             }
             // println!("tcp {:?} recv {} send {}", s.state(), s.may_recv(), s.may_send());
         }

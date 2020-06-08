@@ -18,19 +18,21 @@ use tokio::sync::mpsc::{self, error::TryRecvError};
 use peekable_receiver::PeekableReceiver;
 use crate::rawsock_socket::RawsockInterface;
 pub use socket::{Socket, TcpSocket, UdpSocket, SocketHandle};
+use std::sync::{Arc, Mutex};
 
 type Packet = Vec<u8>;
 pub type OutPacket = (SocketHandle, Packet);
+type Ethernet = SmoltcpEthernetInterface<'static, 'static, 'static, FutureDevice>;
 
 struct EthernetRunner {
-    inner: SmoltcpEthernetInterface<'static, 'static, 'static, FutureDevice>,
-    socket_sender: mpsc::Sender<Socket>,
-    packet_sender: mpsc::Sender<OutPacket>,
+    inner: Ethernet,
+    socket_set: Arc<Mutex<SocketSet>>,
     packet_receiver: mpsc::Receiver<OutPacket>,
 }
 
 pub struct Net {
     socket_stream: mpsc::Receiver<Socket>,
+    socket_set: Arc<Mutex<SocketSet>>,
 }
 
 impl Net {
@@ -52,15 +54,18 @@ impl Net {
             .routes(routes)
             .finalize();
 
+        let socket_set = Arc::new(Mutex::new(
+            SocketSet::new(socket_send, packet_sender)
+        ));
         tokio::spawn(Self::run(EthernetRunner {
             inner,
-            socket_sender: socket_send,
-            packet_sender,
+            socket_set: socket_set.clone(),
             packet_receiver,
         }));
         
         Net {
             socket_stream: socket_recv,
+            socket_set,
         }
     }
     pub async fn next_socket(&mut self) -> Option<Socket> {
@@ -70,15 +75,18 @@ impl Net {
         let default_timeout = Duration::from_millis(1000);
         let EthernetRunner {
             mut inner,
-            socket_sender,
-            packet_sender,
+            socket_set: sockets,
             mut packet_receiver,
         } = args;
-        let mut sockets = SocketSet::new(socket_sender, packet_sender);
 
         loop {
             let start = Instant::now();
-            let deadline = inner.poll_delay(sockets.as_set_mut(), start).unwrap_or(default_timeout);
+            let deadline = {
+                 inner.poll_delay(
+                    sockets.lock().unwrap().as_set_mut(),
+                    start
+                ).unwrap_or(default_timeout)
+            };
             let device = inner.device_mut();
 
             select! {
@@ -86,23 +94,29 @@ impl Net {
                 _ = device.receiver.peek().fuse() => {},
                 item = packet_receiver.recv().fuse() => {
                     if let Some((handle, packet)) = item {
-                        sockets.send(handle, packet).await;
+                        sockets.lock().unwrap().send(handle, packet);
                     } else {
                         break
                     }
                 },
             }
-            let end = Instant::now();
-            let readiness = match inner.poll(sockets.as_set_mut(), end) {
-                Ok(b) => b,
-                Err(e) => {
-                    log::error!("poll error {:?}", e);
-                    true
-                },
-            };
+            {
+                let end = Instant::now();
+                let mut set = sockets.lock().unwrap();
+                let readiness = match inner.poll(
+                    set.as_set_mut(),
+                    end
+                ) {
+                    Ok(b) => b,
+                    Err(e) => {
+                        log::error!("poll error {:?}", e);
+                        true
+                    },
+                };
 
-            if !readiness { continue }
-            sockets.process().await;
+                if !readiness { continue }
+                set.process();
+            }
         }
     }
 }

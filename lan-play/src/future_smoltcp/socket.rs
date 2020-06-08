@@ -34,6 +34,11 @@ impl SocketLeaf {
     pub async fn send<P: Into<Packet>>(&mut self, packet: P) {
         self.tx.send(packet.into()).await.unwrap()
     }
+    pub fn try_send<P: Into<Packet>>(&mut self, packet: P) {
+        self.tx
+            .try_send(packet.into())
+            .expect("FIXME try send failed");
+    }
 }
 
 impl TcpSocket {
