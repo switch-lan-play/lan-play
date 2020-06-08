@@ -1,6 +1,14 @@
 use smoltcp::wire::EthernetAddress;
+use thiserror::Error;
 
-mod error;
+#[derive(Debug, Error)]
+pub enum Error {
+    #[error("Mac address not found")]
+    NotFound,
+    #[error("Failed to call system")]
+    FailedToCallSystem
+}
+
 
 pub struct InterfaceInfo {
     pub ethernet_address: EthernetAddress,
@@ -27,5 +35,3 @@ cfg_if! {
         pub use unix::get_interface_info;
     }
 }
-
-pub use error::{GetAddressError};

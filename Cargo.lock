@@ -464,6 +464,7 @@ dependencies = [
  "rawsock 0.3.0",
  "smoltcp 0.6.0 (git+https://github.com/switch-lan-play/smoltcp.git?branch=accept-all-0.6.0)",
  "structopt 0.3.14 (registry+https://github.com/rust-lang/crates.io-index)",
+ "thiserror 1.0.19 (registry+https://github.com/rust-lang/crates.io-index)",
  "tokio 0.2.21 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 

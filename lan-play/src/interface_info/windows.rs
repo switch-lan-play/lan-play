@@ -1,5 +1,5 @@
 extern crate libc;
-use super::{GetAddressError, InterfaceInfo};
+use super::{Error, InterfaceInfo};
 use smoltcp::wire::EthernetAddress;
 use std::{mem, ptr};
 
@@ -27,7 +27,7 @@ fn from_u16(s: &[u16]) -> Option<String> {
     return None;
 }
 
-pub fn get_interface_info(name: &str) -> Result<InterfaceInfo, GetAddressError> {
+pub fn get_interface_info(name: &str) -> Result<InterfaceInfo, Error> {
     if let Some(intf_guid) = get_guid(name) {
         let mut size = 0u32;
         let mut table: *mut MibIftable = ptr::null_mut();
@@ -74,9 +74,9 @@ pub fn get_interface_info(name: &str) -> Result<InterfaceInfo, GetAddressError> 
             }
             libc::free(mem::transmute(table));
         }
-        return Err(GetAddressError::NotFound);
+        return Err(Error::NotFound);
     }
-    Err(GetAddressError::NotFound)
+    Err(Error::NotFound)
 }
 
 pub const MAX_INTERFACE_NAME_LEN: usize = 256;

@@ -1,15 +1,15 @@
 extern crate nix;
 
-use super::{GetAddressError, InterfaceInfo};
-use smoltcp::wire::{EthernetAddress};
+use super::{Error, InterfaceInfo};
+use smoltcp::wire::EthernetAddress;
 
-impl From<nix::Error> for GetAddressError {
-    fn from(_: nix::Error) -> GetAddressError {
-        GetAddressError::FailedToCallSystem
+impl From<nix::Error> for Error {
+    fn from(_: nix::Error) -> Error {
+        Error::FailedToCallSystem
     }
 }
 
-pub fn get_interface_info(name: &str) -> Result<InterfaceInfo, GetAddressError> {
+pub fn get_interface_info(name: &str) -> Result<InterfaceInfo, Error> {
     extern crate nix;
     use nix::{ifaddrs::{getifaddrs}, sys::socket::SockAddr};
     let addrs = getifaddrs()?;
@@ -25,5 +25,5 @@ pub fn get_interface_info(name: &str) -> Result<InterfaceInfo, GetAddressError> 
             });
         }
     }
-    Err(GetAddressError::NotFound)
+    Err(Error::NotFound)
 }
