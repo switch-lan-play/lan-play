@@ -29,12 +29,12 @@ struct EthernetRunner {
     packet_receiver: mpsc::Receiver<OutPacket>,
 }
 
-pub struct EthernetInterface {
+pub struct Net {
     socket_stream: mpsc::Receiver<Socket>,
 }
 
-impl EthernetInterface {
-    pub fn new(ethernet_addr: EthernetAddress, ip_addrs: Vec<IpCidr>, gateway_ip: Ipv4Address, interf: RawsockInterface) -> EthernetInterface {
+impl Net {
+    pub fn new(ethernet_addr: EthernetAddress, ip_addrs: Vec<IpCidr>, gateway_ip: Ipv4Address, interf: RawsockInterface) -> Net {
         let (socket_send, socket_recv) = mpsc::channel(1);
         let (packet_sender, packet_receiver) = mpsc::channel(1);
 
@@ -59,7 +59,7 @@ impl EthernetInterface {
             packet_receiver,
         }));
         
-        EthernetInterface {
+        Net {
             socket_stream: socket_recv,
         }
     }

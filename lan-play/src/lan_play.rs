@@ -1,7 +1,7 @@
 use crate::proxy::{Proxy, BoxProxy};
 use crate::error::{Error, Result};
 use crate::rawsock_socket::{ErrorWithDesc, RawsockInterfaceSet, RawsockInterface};
-use crate::future_smoltcp::EthernetInterface;
+use crate::future_smoltcp::Net;
 use crate::future_smoltcp::Socket;
 use tokio::task;
 use smoltcp::{
@@ -53,20 +53,14 @@ impl LanPlay
 }
 
 async fn process_interface(interf: RawsockInterface, ipv4cidr: Ipv4Cidr, gateway_ip: Ipv4Address) {
-    // {
-    //     let mut tcp_listener = TcpListener::new(&mut interf).await.unwrap();
-    //     while let Ok(Some(socket)) = tcp_listener.next().await {
-    //         println!("new connection");
-    //     }
-    // }
     let mac = interf.mac();
-    let mut interf = EthernetInterface::new(
+    let mut net = Net::new(
         mac.clone(), 
         vec![ipv4cidr.into()],
         gateway_ip,
         interf
     );
-    while let Some(socket) = interf.next_socket().await {
+    while let Some(socket) = net.next_socket().await {
         println!("New socket {:?}", socket);
         let _: JoinHandle<anyhow::Result<_>> = tokio::spawn(async move {
             match socket {
