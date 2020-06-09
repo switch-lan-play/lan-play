@@ -3,9 +3,9 @@ use tokio::sync::mpsc;
 pub use smoltcp::socket::SocketHandle;
 use futures::stream::{BoxStream, StreamExt};
 use futures::future::{BoxFuture, FutureExt};
-use std::{pin::Pin, task::{Poll, Context}};
+use std::{pin::Pin, task::{Poll, Context}, sync::Arc};
 use bytes::Bytes;
-use super::OutPacket;
+use super::{NetReactor, OutPacket, reactor::Source};
 
 pub type Packet = Bytes;
 
@@ -15,11 +15,15 @@ pub enum Socket {
     Udp(UdpSocket),
 }
 
+pub struct TcpListener {
+    handle: SocketHandle,
+    reactor: NetReactor,
+    source: Arc<Source>,
+}
+
 pub struct TcpSocket {
     handle: SocketHandle,
-    reader: StreamReader<BoxStream<'static, std::io::Result<Packet>>, Packet>,
-    writer: mpsc::Sender<OutPacket>,
-    sending: Option<BoxFuture<'static, Result<(), mpsc::error::SendError<OutPacket>>>>,
+    reactor: NetReactor,
 }
 
 pub struct UdpSocket {
@@ -28,6 +32,33 @@ pub struct UdpSocket {
 
 pub struct SocketLeaf {
     tx: mpsc::Sender<Packet>,
+}
+
+impl Drop for TcpListener {
+    fn drop(&mut self) {
+        self.reactor.remove(&self.handle)
+    }
+}
+
+impl TcpListener {
+    pub(super) fn new(reactor: NetReactor) -> TcpListener {
+        let mut set = reactor.lock_set();
+        let handle = set.new_tcp_socket();
+        drop(set);
+
+        let source = reactor.insert(handle);
+
+        TcpListener {
+            handle,
+            reactor,
+            source,
+        }
+    }
+    pub async fn accept() {
+        loop {
+            self.reactor.read
+        }
+    }
 }
 
 impl SocketLeaf {
@@ -42,16 +73,14 @@ impl SocketLeaf {
 }
 
 impl TcpSocket {
-    pub(super) fn new(handle: SocketHandle, writer: mpsc::Sender<OutPacket>) -> (Self, SocketLeaf) {
+    pub(super) fn new(handle: SocketHandle, reactor: NetReactor) -> (Self, SocketLeaf) {
         let (tx, rx) = mpsc::channel(10);
         let reader = stream_reader(
             rx.map(|x| Ok(x)).boxed()
         );
         (TcpSocket {
             handle,
-            reader,
-            writer,
-            sending: None,
+            reactor,
         }, SocketLeaf {
             tx
         })
@@ -86,14 +115,8 @@ impl AsyncRead for TcpSocket {
         cx: &mut Context<'_>,
         buf: &mut [u8],
     ) -> Poll<io::Result<usize>> {
-        Pin::new(&mut self.reader).poll_read(cx, buf)
-    }
-    fn poll_read_buf<BM: bytes::BufMut>(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-        buf: &mut BM,
-    ) -> Poll<io::Result<usize>> {
-        Pin::new(&mut self.reader).poll_read_buf(cx, buf)
+        // Pin::new(&mut self.reader).poll_read(cx, buf)
+        todo!();
     }
 }
 
@@ -103,18 +126,7 @@ impl AsyncWrite for TcpSocket {
         cx: &mut Context<'_>,
         buf: &[u8],
     ) -> Poll<Result<usize, io::Error>> {
-        match futures::ready!(self.writer.poll_ready(cx)) {
-            Ok(_) => {
-                let handle = self.handle;
-                Poll::Ready(
-                    self.writer
-                        .try_send((handle, buf.to_vec()))
-                        .map(|_| buf.len())
-                        .map_err(|e| io::Error::new(io::ErrorKind::Other, e))
-                )
-            },
-            Err(e) => Poll::Ready(Err(io::Error::new(io::ErrorKind::Other, e))),
-        }
+        todo!();
     }
     fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
         Poll::Ready(Ok(()))

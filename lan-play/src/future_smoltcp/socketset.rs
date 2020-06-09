@@ -2,14 +2,12 @@ use smoltcp::{
     socket::{self, SocketHandle, SocketSet as InnerSocketSet, AnySocket}, phy::ChecksumCapabilities,
 };
 use super::raw_udp::parse_udp;
-use super::{OutPacket, socket::{TcpSocket, UdpSocket, Socket, SocketLeaf}};
+use super::{NetReactor, OutPacket, socket::{TcpSocket, UdpSocket, Socket, SocketLeaf}};
 use tokio::sync::mpsc;
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
 
 pub struct SocketSet {
     set: InnerSocketSet<'static, 'static, 'static>,
-    tcp_listener: Option<SocketHandle>,
     raw_socket: SocketHandle,
     socket_sender: mpsc::Sender<Socket>,
     packet_sender: mpsc::Sender<OutPacket>,
@@ -22,50 +20,25 @@ impl SocketSet {
         let raw_socket = nset.add(new_raw_socket());
         let mut set = SocketSet {
             set: nset,
-            tcp_listener: None,
             raw_socket,
             socket_sender,
             packet_sender,
             leaf_map: HashMap::new(),
         };
-        set.preserve_socket();
         set
-    }
-    fn preserve_socket(&mut self) {
-        if self.tcp_listener.is_none() {
-            let handle = self.set.add(new_tcp_socket());
-            self.tcp_listener = Some(handle)
-        }
     }
     pub fn as_set_mut(&mut self) -> &mut InnerSocketSet<'static, 'static, 'static> {
         &mut self.set
-    }
-    fn get_new_tcp(&mut self) -> Option<TcpSocket> {
-        let handle = match self.tcp_listener {
-            Some(handle) => handle,
-            None => return None,
-        };
-        let listening = self.set.get::<socket::TcpSocket>(handle).is_listening();
-        if listening {
-            None
-        } else {
-            self.tcp_listener.take();
-            self.preserve_socket();
-            let (socket, leaf) = TcpSocket::new(handle, self.packet_sender.clone());
-            self.leaf_map.insert(handle, leaf);
-            Some(socket)
-        }
     }
     pub fn send(&mut self, handle: SocketHandle, data: Vec<u8>) {
         todo!("socketset.send");
         let socket = self.set.get::<socket::TcpSocket>(handle);
     }
-    pub fn process(&mut self)  {
-        if let Some(tcp) = self.get_new_tcp() {
-            self.socket_sender
-                .try_send(tcp.into())
-                .expect("FIXME  can not send tcp socket");
-        }
+    pub fn new_tcp_socket(&mut self) -> SocketHandle {
+        let handle = self.set.add(new_tcp_socket());
+        handle
+    }
+    pub fn process(&mut self) {
         {
             let mut raw = self.set.get::<socket::RawSocket>(self.raw_socket);
             if raw.can_recv() {

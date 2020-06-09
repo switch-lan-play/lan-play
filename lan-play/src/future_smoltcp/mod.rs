@@ -2,37 +2,31 @@ mod peekable_receiver;
 mod socket;
 mod socketset;
 mod raw_udp;
+mod reactor;
 
 use socketset::SocketSet;
 use smoltcp::{
     iface::{EthernetInterfaceBuilder, NeighborCache, EthernetInterface as SmoltcpEthernetInterface, Routes},
     wire::{EthernetAddress, IpCidr, Ipv4Address},
-    time::{Instant, Duration},
+    time::Instant,
     phy::{DeviceCapabilities, RxToken, TxToken},
 };
 use std::collections::BTreeMap;
-use futures::select;
-use futures::prelude::*;
-use tokio::time::delay_for;
 use tokio::sync::mpsc::{self, error::TryRecvError};
 use peekable_receiver::PeekableReceiver;
 use crate::rawsock_socket::RawsockInterface;
-pub use socket::{Socket, TcpSocket, UdpSocket, SocketHandle};
+pub use socket::{Socket, TcpListener, TcpSocket, UdpSocket, SocketHandle};
 use std::sync::{Arc, Mutex};
+use reactor::{NetReactor, ReactorRunner};
 
 type Packet = Vec<u8>;
 pub type OutPacket = (SocketHandle, Packet);
-type Ethernet = SmoltcpEthernetInterface<'static, 'static, 'static, FutureDevice>;
-
-struct EthernetRunner {
-    inner: Ethernet,
-    socket_set: Arc<Mutex<SocketSet>>,
-    packet_receiver: mpsc::Receiver<OutPacket>,
-}
+pub type Ethernet = SmoltcpEthernetInterface<'static, 'static, 'static, FutureDevice>;
 
 pub struct Net {
     socket_stream: mpsc::Receiver<Socket>,
-    socket_set: Arc<Mutex<SocketSet>>,
+    reactor: NetReactor,
+    listener: TcpListener,
 }
 
 impl Net {
@@ -46,7 +40,7 @@ impl Net {
         let mut routes = Routes::new(BTreeMap::new());
         routes.add_default_ipv4_route(gateway_ip).unwrap();
 
-        let inner = EthernetInterfaceBuilder::new(device)
+        let ethernet = EthernetInterfaceBuilder::new(device)
             .ethernet_addr(ethernet_addr)
             .ip_addrs(ip_addrs)
             .neighbor_cache(neighbor_cache)
@@ -57,67 +51,23 @@ impl Net {
         let socket_set = Arc::new(Mutex::new(
             SocketSet::new(socket_send, packet_sender)
         ));
-        tokio::spawn(Self::run(EthernetRunner {
-            inner,
-            socket_set: socket_set.clone(),
-            packet_receiver,
-        }));
+        let reactor = NetReactor::new(socket_set);
+        let r = reactor.clone();
+        tokio::spawn(async move {
+            r.run(ReactorRunner {
+                ethernet,
+                packet_receiver,
+            }).await
+        });
         
         Net {
             socket_stream: socket_recv,
-            socket_set,
+            listener: TcpListener::new(reactor.clone()),
+            reactor,
         }
     }
     pub async fn next_socket(&mut self) -> Option<Socket> {
         self.socket_stream.recv().await
-    }
-    async fn run(args: EthernetRunner) {
-        let default_timeout = Duration::from_millis(1000);
-        let EthernetRunner {
-            mut inner,
-            socket_set: sockets,
-            mut packet_receiver,
-        } = args;
-
-        loop {
-            let start = Instant::now();
-            let deadline = {
-                 inner.poll_delay(
-                    sockets.lock().unwrap().as_set_mut(),
-                    start
-                ).unwrap_or(default_timeout)
-            };
-            let device = inner.device_mut();
-
-            select! {
-                _ = delay_for(deadline.into()).fuse() => {},
-                _ = device.receiver.peek().fuse() => {},
-                item = packet_receiver.recv().fuse() => {
-                    if let Some((handle, packet)) = item {
-                        sockets.lock().unwrap().send(handle, packet);
-                    } else {
-                        break
-                    }
-                },
-            }
-            {
-                let end = Instant::now();
-                let mut set = sockets.lock().unwrap();
-                let readiness = match inner.poll(
-                    set.as_set_mut(),
-                    end
-                ) {
-                    Ok(b) => b,
-                    Err(e) => {
-                        log::error!("poll error {:?}", e);
-                        true
-                    },
-                };
-
-                if !readiness { continue }
-                set.process();
-            }
-        }
     }
 }
 
