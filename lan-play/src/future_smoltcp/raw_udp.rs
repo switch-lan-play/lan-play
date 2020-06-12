@@ -1,18 +1,36 @@
-use smoltcp::{wire::{UdpPacket, UdpRepr, Ipv4Packet, Ipv4Repr, IpEndpoint}, Result};
+use smoltcp::{wire::{UdpPacket, UdpRepr, Ipv4Packet, Ipv4Repr, IpEndpoint, IpAddress}, Result};
 pub use smoltcp::phy::ChecksumCapabilities;
+use std::net::{SocketAddr, SocketAddrV4};
 
 #[derive(Debug)]
 pub struct Udp<'a> {
-    src: IpEndpoint,
-    dst: IpEndpoint,
-    data: &'a [u8],
+    pub src: IpEndpoint,
+    pub dst: IpEndpoint,
+    pub data: &'a [u8],
 }
 
 #[derive(Debug)]
 pub struct OwnedUdp {
-    src: IpEndpoint,
-    dst: IpEndpoint,
-    data: Vec<u8>,
+    pub src: IpEndpoint,
+    pub dst: IpEndpoint,
+    pub data: Vec<u8>,
+}
+
+impl OwnedUdp {
+    pub fn dst(&self) -> SocketAddr {
+        endpoint2socketaddr(&self.dst)
+    }
+}
+
+pub fn endpoint2socketaddr(ep: &IpEndpoint) -> SocketAddr {
+    let ip = match ep.addr {
+        IpAddress::Ipv4(v4) => v4,
+        _ => panic!("not ipv4"),
+    };
+    SocketAddr::V4(SocketAddrV4::new(
+        ip.0.into(),
+        ep.port,
+    ))
 }
 
 pub fn parse_udp_owned(data: &[u8], checksum_caps: &ChecksumCapabilities) -> Result<OwnedUdp> {

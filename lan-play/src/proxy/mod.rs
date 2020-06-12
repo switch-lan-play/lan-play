@@ -5,9 +5,9 @@ pub use self::socks5::Socks5Proxy;
 
 mod direct;
 mod socks5;
-pub type BoxTcp = Box<dyn socket::Tcp + Unpin>;
-pub type BoxUdp = Box<dyn socket::Udp + Unpin>;
-pub type BoxProxy = Box<dyn Proxy + Unpin>;
+pub type BoxTcp = Box<dyn socket::Tcp + Unpin + Send>;
+pub type BoxUdp = Box<dyn socket::Udp + Unpin + Send>;
+pub type BoxProxy = Box<dyn Proxy + Unpin + Sync + Send>;
 lazy_static! {
     pub static ref ANY_ADDR: SocketAddr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 0);
 }
@@ -16,22 +16,21 @@ pub mod socket {
     use std::net::SocketAddr;
     use tokio::io::{self, AsyncRead, AsyncWrite};
 
-    #[async_trait(?Send)]
+    #[async_trait]
     pub trait Tcp: AsyncRead + AsyncWrite {
     }
 
-    #[async_trait(?Send)]
+    #[async_trait]
     pub trait Udp {
         async fn send_to(&mut self, buf: &[u8], addr: SocketAddr) -> io::Result<usize>;
         async fn recv_from(&mut self, buf: &mut [u8]) -> io::Result<(usize, SocketAddr)>;
     }
 }
-#[async_trait(?Send)]
+#[async_trait]
 pub trait Proxy
 {
-    async fn new_tcp(&mut self, addr: SocketAddr) -> io::Result<BoxTcp>;
-    async fn new_udp(&mut self, addr: SocketAddr) -> io::Result<BoxUdp>;
-    async fn join(&mut self) -> ();
+    async fn new_tcp(&self, addr: SocketAddr) -> io::Result<BoxTcp>;
+    async fn new_udp(&self, addr: SocketAddr) -> io::Result<BoxUdp>;
 }
 
 #[cfg(test)]

@@ -6,11 +6,10 @@ use tokio::task;
 use smoltcp::{
     wire::{Ipv4Cidr, Ipv4Address}
 };
-use tokio::prelude::*;
-use tokio::task::JoinHandle;
+use std::sync::Arc;
 
 pub struct LanPlay {
-    pub proxy: BoxProxy,
+    pub proxy: Arc<BoxProxy>,
     pub ipv4cidr: Ipv4Cidr,
     pub gateway_ip: Ipv4Address,
 }
@@ -41,7 +40,7 @@ impl LanPlay
     
         let mut handles: Vec<task::JoinHandle<()>> = vec![];
         for interface in opened {
-            handles.push(task::spawn(process_interface(interface, self.ipv4cidr, self.gateway_ip)));
+            handles.push(task::spawn(process_interface(interface, self.ipv4cidr, self.gateway_ip, self.proxy.clone())));
         }
         for t in handles {
             t.await.map_err(|e| Error::Other(format!("Join error {:?}", e)))?;
@@ -51,7 +50,7 @@ impl LanPlay
     }
 }
 
-async fn process_interface(interf: RawsockInterface, ipv4cidr: Ipv4Cidr, gateway_ip: Ipv4Address) {
+async fn process_interface(interf: RawsockInterface, ipv4cidr: Ipv4Cidr, gateway_ip: Ipv4Address, proxy: Arc<BoxProxy>) {
     let mac = interf.mac();
     let net = Net::new(
         mac.clone(), 
@@ -60,8 +59,14 @@ async fn process_interface(interf: RawsockInterface, ipv4cidr: Ipv4Cidr, gateway
         interf
     );
     let mut udp = net.udp_socket().await;
-    let result = udp.recv().await;
-    println!("udp: {:?}", result);
+    loop {
+        let result = udp.recv().await;
+        println!("udp: {:?}", result);
+        if let Ok(udp) = result {
+            let mut pudp = proxy.new_udp("0.0.0.0:0".parse().unwrap()).await.unwrap();
+            pudp.send_to(&udp.data, udp.dst()).await.unwrap();
+        }
+    }
     // while let Some(event) = net.next_event().await {
     //     println!("New event {:?}", event);
     //     match event {

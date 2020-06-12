@@ -17,6 +17,7 @@ use proxy::DirectProxy;
 use error::Result;
 use std::net::Ipv4Addr;
 use structopt::StructOpt;
+use std::sync::Arc;
 
 // fn parse_ip(src: &str) -> std::result::Result<Ipv4Addr, AddrParseError> {
 //     src.parse()
@@ -64,7 +65,7 @@ async fn main() -> Result<()> {
         .expect("Could not open any packet capturing library");
 
     let mut lp = LanPlay {
-        proxy: DirectProxy::new(),
+        proxy: Arc::new(DirectProxy::new()),
         ipv4cidr,
         gateway_ip,
     };
