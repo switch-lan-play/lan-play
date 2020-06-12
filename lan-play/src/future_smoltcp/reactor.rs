@@ -5,8 +5,9 @@ use tokio::sync::mpsc::{self, error::TryRecvError};
 use super::{Ethernet, OutPacket, SocketSet, Socket, TcpListener, SocketHandle};
 use std::sync::{Arc, Mutex, MutexGuard};
 use smoltcp::time::{Instant, Duration};
-use std::task::Waker;
+use std::task::{Waker, Poll};
 use std::collections::HashMap;
+use std::io;
 
 #[derive(Debug)]
 pub struct Wakers {
@@ -14,7 +15,7 @@ pub struct Wakers {
     writers: Vec<Waker>,
 }
 
-pub struct Source {
+pub(super) struct Source {
     wakers: Mutex<Wakers>,
 }
 
@@ -30,6 +31,46 @@ pub(super) struct NetReactor {
     sources: Arc<Mutex<HashMap<SocketHandle, Arc<Source>>>>,
 }
 
+impl Source {
+    pub async fn readable(&self, reactor: &NetReactor) -> io::Result<()> {
+        let mut polled = false;
+
+        future::poll_fn(|cx| {
+            if polled {
+                Poll::Ready(Ok(()))
+            } else {
+                let mut wakers = self.wakers.lock().unwrap();
+
+                if wakers.readers.iter().all(|w| !w.will_wake(cx.waker())) {
+                    wakers.readers.push(cx.waker().clone());
+                }
+
+                polled = true;
+                Poll::Pending
+            }
+        })
+        .await
+    }
+    pub async fn writable(&self, reactor: &NetReactor) -> io::Result<()> {
+        let mut polled = false;
+
+        future::poll_fn(|cx| {
+            if polled {
+                Poll::Ready(Ok(()))
+            } else {
+                let mut wakers = self.wakers.lock().unwrap();
+
+                if wakers.writers.iter().all(|w| !w.will_wake(cx.waker())) {
+                    wakers.writers.push(cx.waker().clone());
+                }
+
+                polled = true;
+                Poll::Pending
+            }
+        })
+        .await
+    }
+}
 
 impl NetReactor {
     pub fn new(socket_set: Arc<Mutex<SocketSet>>) -> NetReactor {
@@ -38,7 +79,7 @@ impl NetReactor {
             sources: Arc::new(Mutex::new(HashMap::new()))
         }
     }
-    pub fn lock_set(&self) -> MutexGuard<'_, SocketSet> {
+    pub async fn lock_set(&self) -> MutexGuard<'_, SocketSet> {
         self.socket_set.lock().unwrap()
     }
     pub fn insert(&self, handle: SocketHandle) -> Arc<Source> {
@@ -83,23 +124,52 @@ impl NetReactor {
                     }
                 },
             }
-            {
-                let end = Instant::now();
-                let mut set = sockets.lock().unwrap();
-                let readiness = match ethernet.poll(
-                    set.as_set_mut(),
-                    end
-                ) {
-                    Ok(b) => b,
-                    Err(e) => {
-                        log::error!("poll error {:?}", e);
-                        true
-                    },
-                };
+            let end = Instant::now();
+            let mut set = sockets.lock().unwrap();
+            let readiness = match ethernet.poll(
+                set.as_set_mut(),
+                end
+            ) {
+                Ok(b) => b,
+                Err(e) => {
+                    log::error!("poll error {:?}", e);
+                    true
+                },
+            };
 
-                if !readiness { continue }
-                set.process();
+            if !readiness { continue }
+
+            let mut ready = Vec::new();
+            let sources= self.sources.lock().unwrap();
+            for socket in set.as_set_mut().iter() {
+                let (readable, writable) = match socket {
+                    smoltcp::socket::Socket::Tcp(tcp) => {
+                        (tcp.can_recv(), tcp.can_send())
+                    }
+                    smoltcp::socket::Socket::Raw(raw) => {
+                        (raw.can_recv(), raw.can_send())
+                    }
+                    _ => continue // ignore other type
+                };
+                let handle = socket.handle();
+
+                if let Some(source) = sources.get(&handle) {
+                    let mut wakers = source.wakers.lock().unwrap();
+
+                    if readable {
+                        ready.append(&mut wakers.readers);
+                    }
+
+                    if writable {
+                        ready.append(&mut wakers.writers);
+                    }
+                }
             }
+            drop(sources);
+            for waker in ready {
+                waker.wake();
+            }
+            // set.process();
         }
     }
 }

@@ -2,30 +2,29 @@ use smoltcp::{
     socket::{self, SocketHandle, SocketSet as InnerSocketSet, AnySocket}, phy::ChecksumCapabilities,
 };
 use super::raw_udp::parse_udp;
-use super::{NetReactor, OutPacket, socket::{TcpSocket, UdpSocket, Socket, SocketLeaf}};
+use super::{NetReactor, NetEvent, OutPacket, socket::{TcpSocket, UdpSocket, Socket, SocketLeaf}};
 use tokio::sync::mpsc;
 use std::collections::HashMap;
 
 pub struct SocketSet {
     set: InnerSocketSet<'static, 'static, 'static>,
     raw_socket: SocketHandle,
-    socket_sender: mpsc::Sender<Socket>,
+    event_sender: mpsc::Sender<NetEvent>,
     packet_sender: mpsc::Sender<OutPacket>,
     leaf_map: HashMap<SocketHandle, SocketLeaf>,
 }
 
 impl SocketSet {
-    pub fn new(socket_sender: mpsc::Sender<Socket>, packet_sender: mpsc::Sender<OutPacket>) -> SocketSet {
+    pub fn new(event_sender: mpsc::Sender<NetEvent>, packet_sender: mpsc::Sender<OutPacket>) -> SocketSet {
         let mut nset = InnerSocketSet::new(vec![]);
         let raw_socket = nset.add(new_raw_socket());
-        let mut set = SocketSet {
+        SocketSet {
             set: nset,
             raw_socket,
-            socket_sender,
+            event_sender,
             packet_sender,
             leaf_map: HashMap::new(),
-        };
-        set
+        }
     }
     pub fn as_set_mut(&mut self) -> &mut InnerSocketSet<'static, 'static, 'static> {
         &mut self.set
@@ -36,6 +35,10 @@ impl SocketSet {
     }
     pub fn new_tcp_socket(&mut self) -> SocketHandle {
         let handle = self.set.add(new_tcp_socket());
+        handle
+    }
+    pub fn new_raw_socket(&mut self) -> SocketHandle {
+        let handle = self.set.add(new_raw_socket());
         handle
     }
     pub fn process(&mut self) {

@@ -1,10 +1,27 @@
-use smoltcp::{wire::{UdpPacket, UdpRepr, Ipv4Packet, Ipv4Repr, IpEndpoint}, phy::ChecksumCapabilities, Result};
+use smoltcp::{wire::{UdpPacket, UdpRepr, Ipv4Packet, Ipv4Repr, IpEndpoint}, Result};
+pub use smoltcp::phy::ChecksumCapabilities;
 
 #[derive(Debug)]
 pub struct Udp<'a> {
     src: IpEndpoint,
     dst: IpEndpoint,
     data: &'a [u8],
+}
+
+#[derive(Debug)]
+pub struct OwnedUdp {
+    src: IpEndpoint,
+    dst: IpEndpoint,
+    data: Vec<u8>,
+}
+
+pub fn parse_udp_owned(data: &[u8], checksum_caps: &ChecksumCapabilities) -> Result<OwnedUdp> {
+    let Udp { src, dst, data } = parse_udp(data, checksum_caps)?;
+    Ok(OwnedUdp {
+        src,
+        dst,
+        data: data.to_owned(),
+    })
 }
 
 pub fn parse_udp<'a>(data: &'a [u8], checksum_caps: &ChecksumCapabilities) -> Result<Udp<'a>> {

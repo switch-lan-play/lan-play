@@ -18,20 +18,26 @@ use crate::rawsock_socket::RawsockInterface;
 pub use socket::{Socket, TcpListener, TcpSocket, UdpSocket, SocketHandle};
 use std::sync::{Arc, Mutex};
 use reactor::{NetReactor, ReactorRunner};
+use raw_udp::OwnedUdp;
 
 type Packet = Vec<u8>;
 pub type OutPacket = (SocketHandle, Packet);
 pub type Ethernet = SmoltcpEthernetInterface<'static, 'static, 'static, FutureDevice>;
 
+#[derive(Debug)]
+pub enum NetEvent {
+    Tcp(TcpSocket),
+    Udp(OwnedUdp),
+}
+
 pub struct Net {
-    socket_stream: mpsc::Receiver<Socket>,
+    event_stream: mpsc::Receiver<NetEvent>,
     reactor: NetReactor,
-    listener: TcpListener,
 }
 
 impl Net {
     pub fn new(ethernet_addr: EthernetAddress, ip_addrs: Vec<IpCidr>, gateway_ip: Ipv4Address, interf: RawsockInterface) -> Net {
-        let (socket_send, socket_recv) = mpsc::channel(1);
+        let (event_tx, event_rx) = mpsc::channel(1);
         let (packet_sender, packet_receiver) = mpsc::channel(1);
 
         let (_running, tx, rx) = interf.start();
@@ -49,7 +55,7 @@ impl Net {
             .finalize();
 
         let socket_set = Arc::new(Mutex::new(
-            SocketSet::new(socket_send, packet_sender)
+            SocketSet::new(event_tx, packet_sender)
         ));
         let reactor = NetReactor::new(socket_set);
         let r = reactor.clone();
@@ -61,13 +67,18 @@ impl Net {
         });
         
         Net {
-            socket_stream: socket_recv,
-            listener: TcpListener::new(reactor.clone()),
+            event_stream: event_rx,
             reactor,
         }
     }
-    pub async fn next_socket(&mut self) -> Option<Socket> {
-        self.socket_stream.recv().await
+    pub async fn tcp_listener(&self) -> TcpListener {
+        TcpListener::new(self.reactor.clone()).await
+    }
+    pub async fn udp_socket(&self) -> UdpSocket {
+        UdpSocket::new(self.reactor.clone()).await
+    }
+    pub async fn next_event(&mut self) -> Option<NetEvent> {
+        self.event_stream.recv().await
     }
 }
 

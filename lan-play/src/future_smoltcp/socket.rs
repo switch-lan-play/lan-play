@@ -5,7 +5,7 @@ use futures::stream::{BoxStream, StreamExt};
 use futures::future::{BoxFuture, FutureExt};
 use std::{pin::Pin, task::{Poll, Context}, sync::Arc};
 use bytes::Bytes;
-use super::{NetReactor, OutPacket, reactor::Source};
+use super::{NetReactor, OutPacket, reactor::Source, raw_udp::{OwnedUdp, parse_udp_owned, ChecksumCapabilities}};
 
 pub type Packet = Bytes;
 
@@ -28,6 +28,8 @@ pub struct TcpSocket {
 
 pub struct UdpSocket {
     handle: SocketHandle,
+    reactor: NetReactor,
+    source: Arc<Source>,
 }
 
 pub struct SocketLeaf {
@@ -40,9 +42,13 @@ impl Drop for TcpListener {
     }
 }
 
+fn map_err(e: smoltcp::Error) -> io::Error {
+    io::Error::new(io::ErrorKind::Other, e.to_string())
+}
+
 impl TcpListener {
-    pub(super) fn new(reactor: NetReactor) -> TcpListener {
-        let mut set = reactor.lock_set();
+    pub(super) async fn new(reactor: NetReactor) -> TcpListener {
+        let mut set = reactor.lock_set().await;
         let handle = set.new_tcp_socket();
         drop(set);
 
@@ -54,9 +60,40 @@ impl TcpListener {
             source,
         }
     }
-    pub async fn accept() {
+    pub async fn accept(&mut self) -> io::Result<()> {
         loop {
-            self.reactor.read
+            self.source.readable(&self.reactor).await?;
+        }
+    }
+}
+
+impl UdpSocket {
+    pub(super) async fn new(reactor: NetReactor) -> UdpSocket {
+        let mut set = reactor.lock_set().await;
+        let handle = set.new_raw_socket();
+        drop(set);
+
+        let source = reactor.insert(handle);
+
+        UdpSocket {
+            handle,
+            reactor,
+            source,
+        }
+    }
+    pub async fn recv(&mut self) -> io::Result<OwnedUdp> {
+        loop {
+            {
+                let mut set = self.reactor.lock_set().await;
+                let mut socket = set.as_set_mut().get::<smoltcp::socket::RawSocket>(self.handle);
+                if socket.can_recv() {
+                    return socket.recv()
+                        .map(|p| parse_udp_owned(p, &ChecksumCapabilities::default()))
+                        .and_then(|x| x)
+                        .map_err(map_err)
+                }
+            }
+            self.source.readable(&self.reactor).await?;
         }
     }
 }

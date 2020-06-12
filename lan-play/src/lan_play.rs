@@ -1,8 +1,7 @@
 use crate::proxy::{Proxy, BoxProxy};
 use crate::error::{Error, Result};
 use crate::rawsock_socket::{ErrorWithDesc, RawsockInterfaceSet, RawsockInterface};
-use crate::future_smoltcp::Net;
-use crate::future_smoltcp::Socket;
+use crate::future_smoltcp::{Net, Socket, NetEvent};
 use tokio::task;
 use smoltcp::{
     wire::{Ipv4Cidr, Ipv4Address}
@@ -54,29 +53,29 @@ impl LanPlay
 
 async fn process_interface(interf: RawsockInterface, ipv4cidr: Ipv4Cidr, gateway_ip: Ipv4Address) {
     let mac = interf.mac();
-    let mut net = Net::new(
+    let net = Net::new(
         mac.clone(), 
         vec![ipv4cidr.into()],
         gateway_ip,
         interf
     );
-    while let Some(socket) = net.next_socket().await {
-        println!("New socket {:?}", socket);
-        let _ = tokio::spawn(async move {
-            match socket {
-                Socket::Tcp(mut socket) => {
-                    loop {
-                        let byte = socket.read_u8().await?;
-                        println!("{:?}: {}", socket, byte);
-                        socket.write_u8(byte).await?;
-                    }
-                }
-                _ => {
-                    println!("udp");
-                }
-            }
-            anyhow::Result::<()>::Ok(())
-        });
-    }
+    let mut udp = net.udp_socket().await;
+    let result = udp.recv().await;
+    println!("udp: {:?}", result);
+    // while let Some(event) = net.next_event().await {
+    //     println!("New event {:?}", event);
+    //     match event {
+    //         NetEvent::Tcp(mut tcp) => {
+    //             let _ = tokio::spawn(async move {
+    //                 let byte = tcp.read_u8().await.unwrap();
+    //                 println!("{:?}: {}", tcp, byte);
+    //                 tcp.write_u8(byte).await.unwrap();
+    //             });
+    //         }
+    //         NetEvent::Udp(udp) => {
+    //             println!("udp {:?}", udp);
+    //         }
+    //     };
+    // }
     println!("process_interface done");
 }
