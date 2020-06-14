@@ -1,4 +1,4 @@
-use smoltcp::{wire::{UdpPacket, UdpRepr, Ipv4Packet, Ipv4Repr, IpEndpoint, IpAddress}, Result};
+use smoltcp::{wire::{UdpPacket, UdpRepr, Ipv4Packet, Ipv4Repr, IpEndpoint, IpAddress, Ipv4Address, IpProtocol}, Result};
 pub use smoltcp::phy::ChecksumCapabilities;
 use std::net::{SocketAddr, SocketAddrV4};
 
@@ -16,6 +16,19 @@ pub struct OwnedUdp {
     pub data: Vec<u8>,
 }
 
+trait UnwrapV4 {
+    fn unwrap_v4(self) -> Ipv4Address;
+}
+
+impl UnwrapV4 for IpAddress {
+    fn unwrap_v4(self) -> Ipv4Address {
+        match self {
+            IpAddress::Ipv4(v4) => v4,
+            _ => panic!("not v4"),
+        }
+    }
+}
+
 impl OwnedUdp {
     pub fn src(&self) -> SocketAddr {
         endpoint2socketaddr(&self.src)
@@ -23,13 +36,33 @@ impl OwnedUdp {
     pub fn dst(&self) -> SocketAddr {
         endpoint2socketaddr(&self.dst)
     }
+    pub fn to_raw(&self) -> Vec<u8> {
+        let checksum = ChecksumCapabilities::default();
+        let udp_repr = UdpRepr {
+            src_port: self.src.port,
+            dst_port: self.dst.port,
+            payload: &self.data,
+        };
+        let src_addr = self.src.addr;
+        let dst_addr = self.dst.addr;
+        let ip_repr = Ipv4Repr {
+            src_addr: src_addr.unwrap_v4(),
+            dst_addr: dst_addr.unwrap_v4(),
+            protocol: IpProtocol::Udp,
+            payload_len: udp_repr.buffer_len(),
+            hop_limit: 64,
+        };
+        let mut bytes = vec![0xa5; ip_repr.buffer_len() + udp_repr.buffer_len()];
+        let mut udp_packet = UdpPacket::new_unchecked(&mut bytes[ip_repr.buffer_len()..]);
+        udp_repr.emit(&mut udp_packet, &src_addr, &dst_addr, &checksum);
+        let mut ip_packet = Ipv4Packet::new_unchecked(&mut bytes);
+        ip_repr.emit(&mut ip_packet, &checksum);
+        bytes
+    }
 }
 
 pub fn endpoint2socketaddr(ep: &IpEndpoint) -> SocketAddr {
-    let ip = match ep.addr {
-        IpAddress::Ipv4(v4) => v4,
-        _ => panic!("not ipv4"),
-    };
+    let ip = ep.addr.unwrap_v4();
     SocketAddr::V4(SocketAddrV4::new(
         ip.0.into(),
         ep.port,

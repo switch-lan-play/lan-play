@@ -97,13 +97,13 @@ impl UdpSocket {
             self.source.readable(&self.reactor).await?;
         }
     }
-    pub async fn send(&mut self, data: &[u8]) -> io::Result<()> {
+    pub async fn send(&mut self, data: OwnedUdp) -> io::Result<()> {
         loop {
             {
                 let mut set = self.reactor.lock_set().await;
                 let mut socket = set.as_set_mut().get::<smoltcp::socket::RawSocket>(self.handle);
                 if socket.can_send() {
-                    match socket.send_slice(data) {
+                    match socket.send_slice(&data.to_raw()) {
                         Err(Error::Exhausted) => {},
                         res => return res.map_err(map_err)
                     }

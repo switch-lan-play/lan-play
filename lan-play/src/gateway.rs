@@ -24,30 +24,32 @@ impl Gateway {
         }
     }
     pub async fn process(&self, mut _tcp: TcpListener, mut udp: UdpSocket) -> io::Result<()> {
-        let (tx, udp_rx) = mpsc::channel(10);
+        let (udp_tx, mut udp_rx) = mpsc::channel(10);
         loop {
             tokio::select! {
                 result = udp.recv() => {
                     if let Ok(udp) = result {
-                        if let Err(e) = self.on_udp(udp).await {
+                        if let Err(e) = self.on_udp(udp, udp_tx.clone()).await {
                             log::error!("on_udp {:?}", e);
                         }
                     }
                 }
-                udp = udp_rx.recv() => {
-                    if let Some(mut udp) = udp {
-                        udp.send(udp).await;
+                p = udp_rx.recv() => {
+                    if let Some(p) = p {
+                        if let Err(e) = udp.send(p).await {
+                            log::error!("udp.send {:?}", e);
+                        }
                     }
                 }
             };
         }
         Ok(())
     }
-    pub async fn on_udp(&self, udp: OwnedUdp) -> io::Result<()> {
+    pub async fn on_udp(&self, udp: OwnedUdp, sender: mpsc::Sender<OwnedUdp>) -> io::Result<()> {
         let mut inner = self.inner.lock().await;
         let src = udp.src();
         if !inner.udp_cache.contains(&src) {
-            inner.udp_cache.put(src, UdpConnection::new(&self.proxy).await?);
+            inner.udp_cache.put(src, UdpConnection::new(&self.proxy, sender).await?);
         }
         let connection = inner.udp_cache.get_mut(&src).unwrap();
         connection.send_to(&udp.data, udp.dst()).await?;
@@ -57,13 +59,15 @@ impl Gateway {
 
 struct UdpConnection {
     pudp: BoxUdp,
+    sender: mpsc::Sender<OwnedUdp>,
 }
 
 impl UdpConnection {
-    async fn new(proxy: &BoxProxy) -> io::Result<UdpConnection> {
+    async fn new(proxy: &BoxProxy, sender: mpsc::Sender<OwnedUdp>) -> io::Result<UdpConnection> {
         let pudp = proxy.new_udp("0.0.0.0:0".parse().unwrap()).await?;
         Ok(UdpConnection {
             pudp,
+            sender,
         })
     }
     async fn send_to(&self, buf: &[u8], addr: SocketAddr) -> io::Result<usize> {
