@@ -1,6 +1,7 @@
 use tokio::io::{self, AsyncRead, AsyncWrite, StreamReader, stream_reader};
 use tokio::sync::mpsc;
-pub use smoltcp::socket::SocketHandle;
+pub use smoltcp::socket::{self, SocketHandle, SocketRef};
+use smoltcp::Error;
 use futures::stream::{BoxStream, StreamExt};
 use futures::future::{BoxFuture, FutureExt};
 use std::{pin::Pin, task::{Poll, Context}, sync::Arc};
@@ -85,7 +86,7 @@ impl UdpSocket {
         loop {
             {
                 let mut set = self.reactor.lock_set().await;
-                let mut socket = set.as_set_mut().get::<smoltcp::socket::RawSocket>(self.handle);
+                let mut socket = set.as_set_mut().get::<socket::RawSocket>(self.handle);
                 if socket.can_recv() {
                     return socket.recv()
                         .map(|p| parse_udp_owned(p, &ChecksumCapabilities::default()))
@@ -94,6 +95,21 @@ impl UdpSocket {
                 }
             }
             self.source.readable(&self.reactor).await?;
+        }
+    }
+    pub async fn send(&mut self, data: &[u8]) -> io::Result<()> {
+        loop {
+            {
+                let mut set = self.reactor.lock_set().await;
+                let mut socket = set.as_set_mut().get::<smoltcp::socket::RawSocket>(self.handle);
+                if socket.can_send() {
+                    match socket.send_slice(data) {
+                        Err(Error::Exhausted) => {},
+                        res => return res.map_err(map_err)
+                    }
+                }
+            }
+            self.source.writable(&self.reactor).await?;
         }
     }
 }

@@ -18,7 +18,7 @@ use crate::rawsock_socket::RawsockInterface;
 pub use socket::{Socket, TcpListener, TcpSocket, UdpSocket, SocketHandle};
 use std::sync::{Arc, Mutex};
 use reactor::{NetReactor, ReactorRunner};
-use raw_udp::OwnedUdp;
+pub use raw_udp::OwnedUdp;
 
 type Packet = Vec<u8>;
 pub type OutPacket = (SocketHandle, Packet);

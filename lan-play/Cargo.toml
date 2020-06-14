@@ -20,7 +20,6 @@ dotenv = "0.15"
 anyhow = "1.0"
 thiserror = "1.0"
 async-socks5 = "0.3.1"
-derive_builder = "0.9"
 lru = "0.5"
 
 [dependencies.smoltcp]

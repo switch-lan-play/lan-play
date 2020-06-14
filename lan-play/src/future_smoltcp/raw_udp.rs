@@ -17,6 +17,9 @@ pub struct OwnedUdp {
 }
 
 impl OwnedUdp {
+    pub fn src(&self) -> SocketAddr {
+        endpoint2socketaddr(&self.src)
+    }
     pub fn dst(&self) -> SocketAddr {
         endpoint2socketaddr(&self.dst)
     }
