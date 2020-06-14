@@ -8,20 +8,17 @@ mod proxy;
 mod lan_play;
 mod error;
 mod future_smoltcp;
+mod gateway;
 
 use rawsock_socket::RawsockInterfaceSet;
 use smoltcp::wire::Ipv4Cidr;
 use rawsock::traits::Library;
-use lan_play::LanPlay;
+use lan_play::LanPlayBuilder;
 use proxy::DirectProxy;
 use error::Result;
 use std::net::Ipv4Addr;
 use structopt::StructOpt;
 use std::sync::Arc;
-
-// fn parse_ip(src: &str) -> std::result::Result<Ipv4Addr, AddrParseError> {
-//     src.parse()
-// }
 
 /// Lan play
 #[derive(Debug, StructOpt)]
@@ -64,11 +61,12 @@ async fn main() -> Result<()> {
     let set = RawsockInterfaceSet::new(&RAWSOCK_LIB, ipv4cidr)
         .expect("Could not open any packet capturing library");
 
-    let mut lp = LanPlay {
-        proxy: Arc::new(DirectProxy::new()),
-        ipv4cidr,
-        gateway_ip,
-    };
+    let mut lp = LanPlayBuilder::default()
+        .proxy(Arc::new(DirectProxy::new()))
+        .ipv4cidr(ipv4cidr)
+        .gateway_ip(gateway_ip)
+        .build()
+        .map_err(|e| error::Error::Other(e))?;
 
     lp.start(&set, opt.netif).await?;
 

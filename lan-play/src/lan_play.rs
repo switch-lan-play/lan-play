@@ -1,17 +1,23 @@
-use crate::proxy::{Proxy, BoxProxy};
+use crate::proxy::{Proxy, BoxProxy, BoxUdp};
 use crate::error::{Error, Result};
 use crate::rawsock_socket::{ErrorWithDesc, RawsockInterfaceSet, RawsockInterface};
 use crate::future_smoltcp::{Net, Socket, NetEvent};
 use tokio::task;
 use smoltcp::{
-    wire::{Ipv4Cidr, Ipv4Address}
+    wire::{Ipv4Cidr, Ipv4Address, IpEndpoint}
 };
 use std::sync::Arc;
+use derive_builder::Builder;
+use lru::LruCache;
 
+#[derive(Builder)]
 pub struct LanPlay {
-    pub proxy: Arc<BoxProxy>,
-    pub ipv4cidr: Ipv4Cidr,
-    pub gateway_ip: Ipv4Address,
+    proxy: Arc<BoxProxy>,
+    ipv4cidr: Ipv4Cidr,
+    gateway_ip: Ipv4Address,
+    
+    #[builder(default = "LruCache::new(100)", setter(skip))]
+    cache: LruCache<IpEndpoint, BoxUdp>,
 }
 
 impl LanPlay
