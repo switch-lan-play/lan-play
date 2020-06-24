@@ -5,17 +5,18 @@ pub use self::socks5::Socks5Proxy;
 
 mod direct;
 mod socks5;
-pub type BoxTcp = Box<dyn socket::Tcp + Unpin + Send>;
-pub type BoxUdp = Box<dyn socket::Udp + Unpin + Send>;
+pub use socket::{BoxTcp, BoxUdp, Udp2, other};
 pub type BoxProxy = Box<dyn Proxy + Unpin + Sync + Send>;
 lazy_static! {
     pub static ref ANY_ADDR: SocketAddr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 0);
 }
 
 pub mod socket {
-    use std::net::SocketAddr;
-    use tokio::io::{self, AsyncRead, AsyncWrite};
+    use std::{net::SocketAddr, sync::Arc};
+    use tokio::{io::{self, AsyncRead, AsyncWrite}, sync::{Notify, Mutex}};
 
+    pub type BoxTcp = Box<dyn Tcp + Unpin + Send>;
+    pub type BoxUdp = Box<dyn Udp + Unpin + Send>;
     #[async_trait]
     pub trait Tcp: AsyncRead + AsyncWrite {
     }
@@ -25,12 +26,70 @@ pub mod socket {
         async fn send_to(&mut self, buf: &[u8], addr: SocketAddr) -> io::Result<usize>;
         async fn recv_from(&mut self, buf: &mut [u8]) -> io::Result<(usize, SocketAddr)>;
     }
+
+    pub struct Udp2(Arc<(Mutex<BoxUdp>, Notify, Notify)>);
+
+    impl From<BoxUdp> for Udp2 {
+        fn from(u: BoxUdp) -> Self {
+            Udp2::new(u)
+        }
+    }
+
+    impl Udp2 {
+        fn new(u: BoxUdp) -> Self {
+            let inner = Arc::new((
+                Mutex::new(u), Notify::new(), Notify::new()
+            ));
+            Udp2(inner)
+        }
+        pub async fn send_to(&self, buf: &[u8], addr: SocketAddr) -> io::Result<usize> {
+            let inner = &self.0;
+            let udp = &inner.0;
+            let notify1 = &inner.1;
+            let notify2 = &inner.2;
+            notify1.notify();
+            let r = udp.lock().await.send_to(buf, addr).await;
+            notify2.notify();
+            r
+        }
+        pub async fn recv_from(&self, buf: &mut [u8]) -> io::Result<(usize, SocketAddr)> {
+            let inner = &self.0;
+            let udp = &inner.0;
+            let notify1 = &inner.1;
+            let notify2 = &inner.2;
+
+            loop {
+                let mut lock = udp.lock().await;
+                tokio::select! {
+                    r = lock.recv_from(buf) => {
+                        return r
+                    }
+                    _ = notify1.notified() => {
+                        drop(lock);
+                        notify2.notified().await;
+                    }
+                };
+            }
+        }
+    }
+    pub fn other<E: Into<Box<dyn std::error::Error + Send + Sync>>>(e: E) -> io::Error {
+        io::Error::new(io::ErrorKind::Other, e)
+    }
 }
 #[async_trait]
 pub trait Proxy
 {
     async fn new_tcp(&self, addr: SocketAddr) -> io::Result<BoxTcp>;
     async fn new_udp(&self, addr: SocketAddr) -> io::Result<BoxUdp>;
+}
+
+pub fn spawn_udp(mut udp: BoxUdp) {
+    tokio::spawn(async move {
+        let mut buf = vec![0u8; 1000];
+        let (size, addr) = udp.recv_from(&mut buf).await?;
+        udp.send_to(&buf, addr).await?;
+        Ok::<_, io::Error>(())
+    });
 }
 
 #[cfg(test)]
@@ -62,7 +121,7 @@ mod test {
             copy(&mut reader, &mut writer).await?;
             Ok::<_, tokio::io::Error>(())
         });
-        let mut proxy: BoxProxy = DirectProxy::new();
+        let proxy: BoxProxy = DirectProxy::new();
         let mut tcp = proxy.new_tcp(
             SocketAddr::new("127.0.0.1".parse().unwrap(), port)
         ).await.unwrap();
@@ -86,7 +145,7 @@ mod test {
             server.send_to(&buf[..size], addr).await?;
             Ok::<_, tokio::io::Error>(())
         });
-        let mut proxy: BoxProxy = DirectProxy::new();
+        let proxy: BoxProxy = DirectProxy::new();
         let mut udp = proxy.new_udp(
             *ANY_ADDR
         ).await.unwrap();
@@ -113,7 +172,7 @@ mod test {
             copy(&mut reader, &mut writer).await?;
             Ok::<_, tokio::io::Error>(())
         });
-        let mut proxy: BoxProxy = Socks5Proxy::new(([127, 0, 0, 1], socks5_port).into(), None);
+        let proxy: BoxProxy = Socks5Proxy::new(([127, 0, 0, 1], socks5_port).into(), None);
         let mut tcp = proxy.new_tcp(
             SocketAddr::new([127, 0, 0, 1].into(), port)
         ).await.unwrap();

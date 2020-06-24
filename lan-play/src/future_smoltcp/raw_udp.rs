@@ -30,6 +30,13 @@ impl UnwrapV4 for IpAddress {
 }
 
 impl OwnedUdp {
+    pub fn new(src: SocketAddr, dst: SocketAddr, data: Vec<u8>) -> OwnedUdp {
+        OwnedUdp {
+            src: src.into(),
+            dst: dst.into(),
+            data,
+        }
+    }
     pub fn src(&self) -> SocketAddr {
         endpoint2socketaddr(&self.src)
     }

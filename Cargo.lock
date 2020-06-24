@@ -243,6 +243,14 @@ version = "0.15.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
+name = "drop-abort"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+dependencies = [
+ "futures-util 0.3.5 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
 name = "env_logger"
 version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -504,6 +512,7 @@ dependencies = [
  "cfg-if 0.1.10 (registry+https://github.com/rust-lang/crates.io-index)",
  "crossbeam-utils 0.6.6 (registry+https://github.com/rust-lang/crates.io-index)",
  "dotenv 0.15.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "drop-abort 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "env_logger 0.7.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "fast-socks5 0.3.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "futures 0.3.5 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1222,6 +1231,7 @@ dependencies = [
 "checksum dlopen 0.1.8 (registry+https://github.com/rust-lang/crates.io-index)" = "71e80ad39f814a9abe68583cd50a2d45c8a67561c3361ab8da240587dda80937"
 "checksum dlopen_derive 0.1.4 (registry+https://github.com/rust-lang/crates.io-index)" = "f236d9e1b1fbd81cea0f9cbdc8dcc7e8ebcd80e6659cd7cb2ad5f6c05946c581"
 "checksum dotenv 0.15.0 (registry+https://github.com/rust-lang/crates.io-index)" = "77c90badedccf4105eca100756a0b1289e191f6fcbdadd3cee1d2f614f97da8f"
+"checksum drop-abort 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)" = "8e6568c388461c7b47e814a17bab139ee2c7bf283d4ba8627877b706e4c9d435"
 "checksum env_logger 0.7.1 (registry+https://github.com/rust-lang/crates.io-index)" = "44533bbbb3bb3c1fa17d9f2e4e38bbbaf8396ba82193c4cb1b6445d711445d36"
 "checksum errno 0.2.5 (registry+https://github.com/rust-lang/crates.io-index)" = "b480f641ccf0faf324e20c1d3e53d81b7484c698b42ea677f6907ae4db195371"
 "checksum errno-dragonfly 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)" = "14ca354e36190500e1e1fb267c647932382b54053c50b14970856c0b00a35067"
