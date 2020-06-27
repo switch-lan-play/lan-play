@@ -68,7 +68,6 @@ fn main() {
 ```
 
 */
-
 extern crate dlopen;
 #[macro_use]
 extern crate dlopen_derive;
@@ -79,12 +78,15 @@ extern crate time;
 #[macro_use]
 extern crate lazy_static;
 
+mod common;
 pub mod pcap;
-pub mod wpcap;
+mod pcap_common;
 pub mod pfring;
 pub mod traits;
-mod pcap_common;
 mod utils;
-mod common;
+pub mod wpcap;
 
-pub use self::common::{Packet, BorrowedPacket, OwnedPacket, DataLink, LibraryVersion, open_best_library, open_best_library_arc,InterfaceDescription, Error, Stats};
+pub use self::common::{
+    open_best_library, open_best_library_arc, BorrowedPacket, DataLink, Error,
+    InterfaceDescription, LibraryVersion, OwnedPacket, Packet, Stats,
+};

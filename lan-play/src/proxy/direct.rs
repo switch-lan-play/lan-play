@@ -1,12 +1,10 @@
-use super::{Proxy, socket, SocketAddr, BoxTcp, BoxUdp, BoxProxy};
-use tokio::task::{self, JoinHandle};
-use tokio::net::{TcpStream, UdpSocket};
+use super::{socket, BoxProxy, BoxTcp, BoxUdp, Proxy, SocketAddr};
 use tokio::io;
+use tokio::net::{TcpStream, UdpSocket};
+use tokio::task::{self, JoinHandle};
 
 #[async_trait]
-impl socket::Tcp for TcpStream {
-
-}
+impl socket::Tcp for TcpStream {}
 
 #[async_trait]
 impl socket::Udp for UdpSocket {
@@ -18,14 +16,11 @@ impl socket::Udp for UdpSocket {
     }
 }
 
-
-pub struct DirectProxy {
-}
+pub struct DirectProxy {}
 
 impl DirectProxy {
     pub fn new() -> BoxProxy {
-        Box::new(Self {
-        })
+        Box::new(Self {})
     }
 }
 

@@ -1,11 +1,11 @@
-pub use std::io;
-pub use std::net::{SocketAddr, IpAddr, Ipv4Addr};
 pub use self::direct::DirectProxy;
 pub use self::socks5::Socks5Proxy;
+pub use std::io;
+pub use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 
 mod direct;
 mod socks5;
-pub use socket::{BoxTcp, BoxUdp, Udp2, other};
+pub use socket::{other, BoxTcp, BoxUdp, Udp2};
 pub type BoxProxy = Box<dyn Proxy + Unpin + Sync + Send>;
 lazy_static! {
     pub static ref ANY_ADDR: SocketAddr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 0);
@@ -13,13 +13,15 @@ lazy_static! {
 
 pub mod socket {
     use std::{net::SocketAddr, sync::Arc};
-    use tokio::{io::{self, AsyncRead, AsyncWrite}, sync::{Notify, Mutex}};
+    use tokio::{
+        io::{self, AsyncRead, AsyncWrite},
+        sync::{Mutex, Notify},
+    };
 
     pub type BoxTcp = Box<dyn Tcp + Unpin + Send>;
     pub type BoxUdp = Box<dyn Udp + Unpin + Send>;
     #[async_trait]
-    pub trait Tcp: AsyncRead + AsyncWrite {
-    }
+    pub trait Tcp: AsyncRead + AsyncWrite {}
 
     #[async_trait]
     pub trait Udp {
@@ -37,9 +39,7 @@ pub mod socket {
 
     impl Udp2 {
         fn new(u: BoxUdp) -> Self {
-            let inner = Arc::new((
-                Mutex::new(u), Notify::new(), Notify::new()
-            ));
+            let inner = Arc::new((Mutex::new(u), Notify::new(), Notify::new()));
             Udp2(inner)
         }
         pub async fn send_to(&self, buf: &[u8], addr: SocketAddr) -> io::Result<usize> {
@@ -77,8 +77,7 @@ pub mod socket {
     }
 }
 #[async_trait]
-pub trait Proxy
-{
+pub trait Proxy {
     async fn new_tcp(&self, addr: SocketAddr) -> io::Result<BoxTcp>;
     async fn new_udp(&self, addr: SocketAddr) -> io::Result<BoxUdp>;
 }
@@ -94,11 +93,11 @@ pub fn spawn_udp(mut udp: BoxUdp) {
 
 #[cfg(test)]
 mod test {
+    use super::socks5::test::socks5_server;
     use super::*;
-    use tokio::io::{split, copy};
+    use tokio::io::{copy, split};
     use tokio::net::{TcpListener, UdpSocket};
     use tokio::prelude::*;
-    use super::socks5::test::socks5_server;
 
     async fn server_tcp() -> (TcpListener, u16) {
         let server = TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -122,9 +121,10 @@ mod test {
             Ok::<_, tokio::io::Error>(())
         });
         let proxy: BoxProxy = DirectProxy::new();
-        let mut tcp = proxy.new_tcp(
-            SocketAddr::new("127.0.0.1".parse().unwrap(), port)
-        ).await.unwrap();
+        let mut tcp = proxy
+            .new_tcp(SocketAddr::new("127.0.0.1".parse().unwrap(), port))
+            .await
+            .unwrap();
 
         let mut buf = [0u8; 5];
         tcp.write_all(b"hello").await?;
@@ -146,9 +146,7 @@ mod test {
             Ok::<_, tokio::io::Error>(())
         });
         let proxy: BoxProxy = DirectProxy::new();
-        let mut udp = proxy.new_udp(
-            *ANY_ADDR
-        ).await.unwrap();
+        let mut udp = proxy.new_udp(*ANY_ADDR).await.unwrap();
         let target = SocketAddr::new("127.0.0.1".parse().unwrap(), port);
 
         let mut buf = [0u8; 65536];
@@ -173,9 +171,10 @@ mod test {
             Ok::<_, tokio::io::Error>(())
         });
         let proxy: BoxProxy = Socks5Proxy::new(([127, 0, 0, 1], socks5_port).into(), None);
-        let mut tcp = proxy.new_tcp(
-            SocketAddr::new([127, 0, 0, 1].into(), port)
-        ).await.unwrap();
+        let mut tcp = proxy
+            .new_tcp(SocketAddr::new([127, 0, 0, 1].into(), port))
+            .await
+            .unwrap();
 
         let mut buf = [0u8; 5];
         tcp.write_all(b"hello").await?;

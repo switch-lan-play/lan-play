@@ -1,19 +1,19 @@
-use std::fmt::{Display, Formatter, Error as FmtError};
+use std::fmt::{Display, Error as FmtError, Formatter};
 
 ///Kind of data link - protocol used below the surface.
 #[derive(Debug, Copy, Clone)]
-pub enum DataLink{
+pub enum DataLink {
     Ethernet,
     RawIp,
-    Other
+    Other,
 }
 
-impl Display for DataLink{
+impl Display for DataLink {
     fn fmt(&self, f: &mut Formatter) -> Result<(), FmtError> {
         match self {
             DataLink::Ethernet => write!(f, "ethernet"),
             DataLink::RawIp => write!(f, "raw IP"),
-            DataLink::Other => write!(f, "other")
+            DataLink::Other => write!(f, "other"),
         }
     }
 }

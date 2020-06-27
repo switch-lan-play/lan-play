@@ -11,7 +11,7 @@ impl From<nix::Error> for Error {
 
 pub fn get_interface_info(name: &str) -> Result<InterfaceInfo, Error> {
     extern crate nix;
-    use nix::{ifaddrs::{getifaddrs}, sys::socket::SockAddr};
+    use nix::{ifaddrs::getifaddrs, sys::socket::SockAddr};
     let addrs = getifaddrs()?;
     for ifaddr in addrs {
         if ifaddr.interface_name != name {

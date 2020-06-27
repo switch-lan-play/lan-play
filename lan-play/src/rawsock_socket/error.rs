@@ -14,4 +14,4 @@ pub enum Error {
     Other(&'static str),
 }
 #[derive(Debug)]
-pub struct ErrorWithDesc (pub Error, pub InterfaceDescription);
+pub struct ErrorWithDesc(pub Error, pub InterfaceDescription);

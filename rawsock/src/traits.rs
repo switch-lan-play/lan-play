@@ -2,17 +2,16 @@
 Common traits for all libraries.
 */
 
-use crate::{BorrowedPacket, DataLink, LibraryVersion, Error, InterfaceDescription, Stats};
+use crate::{BorrowedPacket, DataLink, Error, InterfaceDescription, LibraryVersion, Stats};
+use std::ffi::{CStr, CString};
 use std::iter::IntoIterator;
 use std::sync::Arc;
-use std::ffi::{CStr, CString};
 use std::time::Duration;
 
 ///Trait for structures representing an opened interface (or network card or network device)
 ///
 /// Interfaces are opened using a concrete library - check the Library trait.
-pub trait DynamicInterface<'a>: Send + Sync{
-
+pub trait DynamicInterface<'a>: Send + Sync {
     ///Sends a raw packet.
     fn send(&self, packet: &[u8]) -> Result<(), Error>;
 
@@ -29,14 +28,14 @@ pub trait DynamicInterface<'a>: Send + Sync{
     fn stats(&self) -> Result<Stats, Error>;
 
     ///Breaks previously started loops.
-    fn break_loop(&  self);
+    fn break_loop(&self);
 
     /**
     Runs infinite loop and passes received packets via callback.
 
     Exits when the break_loop() function is called or on error.
     */
-    fn loop_infinite_dyn(&self, callback: & dyn FnMut(&BorrowedPacket)) -> Result<(), Error>;
+    fn loop_infinite_dyn(&self, callback: &dyn FnMut(&BorrowedPacket)) -> Result<(), Error>;
 
     ///Set bpf filter.
     fn set_filter(&mut self, filter: &str) -> Result<(), Error> {
@@ -64,14 +63,14 @@ pub trait DynamicInterface<'a>: Send + Sync{
     StaticInterface contains only the part of trait that cannot be used in the dynamic way.
 */
 pub trait StaticInterface<'a>: DynamicInterface<'a> {
-
     /**
     Runs infinite loop and passes received packets via callback.
 
     Exits when the break_loop() function is called or on error.
     */
-    fn loop_infinite<F>(& self, callback: F) -> Result<(), Error> where F: FnMut(&BorrowedPacket);
-
+    fn loop_infinite<F>(&self, callback: F) -> Result<(), Error>
+    where
+        F: FnMut(&BorrowedPacket);
 }
 
 /// Trait for structures representing opened packet capture libraries.
@@ -79,39 +78,55 @@ pub trait StaticInterface<'a>: DynamicInterface<'a> {
 /// There are several libraries that can be used among different platforms.
 /// For example pcap.so, wpcap.dll or pfring.so.
 /// This trait provides a consistent interface to all of them.
-pub trait Library: Send+Sync{
-
+pub trait Library: Send + Sync {
     //const DEFAULT_PATHS: &'static [&'static str];
 
     ///Opens this library by searching for most common paths and names fro the given platform
-    fn open_default_paths() -> Result<Self, Error> where Self: Sized {
-        Self::open_paths(Self::default_paths().iter().map(|s|*s))
+    fn open_default_paths() -> Result<Self, Error>
+    where
+        Self: Sized,
+    {
+        Self::open_paths(Self::default_paths().iter().map(|s| *s))
     }
 
     ///Returns list of default paths to the library on the given platform.
-    fn default_paths() -> &'static[&'static str] where Self: Sized;
+    fn default_paths() -> &'static [&'static str]
+    where
+        Self: Sized;
 
     ///Opens library searching in the list of provided paths.
-    fn open_paths<'b, T>(paths: T) -> Result<Self, Error> where Self: Sized, T:IntoIterator<Item=&'b str>{
+    fn open_paths<'b, T>(paths: T) -> Result<Self, Error>
+    where
+        Self: Sized,
+        T: IntoIterator<Item = &'b str>,
+    {
         let mut err = Error::NoPathsProvided;
-        for path in paths.into_iter(){
+        for path in paths.into_iter() {
             match Self::open(path) {
                 Err(e) => err = e,
-                Ok(lib) => return Ok(lib)
+                Ok(lib) => return Ok(lib),
             }
         }
         Err(err)
     }
 
     ///Opens library by checking the provided path to it.
-    fn open(path: &str) -> Result<Self, Error> where Self: Sized;
+    fn open(path: &str) -> Result<Self, Error>
+    where
+        Self: Sized;
 
     ///Opens interface (network card or network device) with the provided name.
     ///
     /// You can obtain names of available devices by calling the all_interfaces() function.
-    fn open_interface<'a>(&'a self, name: &str) -> Result<Box<dyn DynamicInterface<'a>+'a>, Error>;
+    fn open_interface<'a>(
+        &'a self,
+        name: &str,
+    ) -> Result<Box<dyn DynamicInterface<'a> + 'a>, Error>;
 
-    fn open_interface_arc<'a>(&'a self, name: &str) -> Result<Arc<dyn DynamicInterface<'a> + 'a>, Error>;
+    fn open_interface_arc<'a>(
+        &'a self,
+        name: &str,
+    ) -> Result<Arc<dyn DynamicInterface<'a> + 'a>, Error>;
 
     /**
     Obtains list of available network interfaces.
@@ -149,5 +164,3 @@ pub trait Library: Send+Sync{
     ///Returns library version
     fn version(&self) -> LibraryVersion;
 }
-
-

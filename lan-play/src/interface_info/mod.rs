@@ -6,9 +6,8 @@ pub enum Error {
     #[error("Mac address not found")]
     NotFound,
     #[error("Failed to call system")]
-    FailedToCallSystem
+    FailedToCallSystem,
 }
-
 
 pub struct InterfaceInfo {
     pub ethernet_address: EthernetAddress,

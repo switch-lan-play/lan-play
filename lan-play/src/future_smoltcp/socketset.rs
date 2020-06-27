@@ -1,10 +1,14 @@
-use smoltcp::{
-    socket::{self, SocketHandle, SocketSet as InnerSocketSet, AnySocket}, phy::ChecksumCapabilities,
-};
 use super::raw_udp::parse_udp;
-use super::{NetReactor, NetEvent, OutPacket, socket::{TcpSocket, UdpSocket, Socket, SocketLeaf}};
-use tokio::sync::mpsc;
+use super::{
+    socket::{Socket, SocketLeaf, TcpSocket, UdpSocket},
+    NetEvent, NetReactor, OutPacket,
+};
+use smoltcp::{
+    phy::ChecksumCapabilities,
+    socket::{self, AnySocket, SocketHandle, SocketSet as InnerSocketSet},
+};
 use std::collections::HashMap;
+use tokio::sync::mpsc;
 
 pub struct SocketSet {
     set: InnerSocketSet<'static, 'static, 'static>,
@@ -15,7 +19,10 @@ pub struct SocketSet {
 }
 
 impl SocketSet {
-    pub fn new(event_sender: mpsc::Sender<NetEvent>, packet_sender: mpsc::Sender<OutPacket>) -> SocketSet {
+    pub fn new(
+        event_sender: mpsc::Sender<NetEvent>,
+        packet_sender: mpsc::Sender<OutPacket>,
+    ) -> SocketSet {
         let mut nset = InnerSocketSet::new(vec![]);
         let raw_socket = nset.add(new_raw_socket());
         SocketSet {
@@ -53,10 +60,12 @@ impl SocketSet {
         for mut s in self.set.iter_mut().filter_map(socket::TcpSocket::downcast) {
             if s.may_recv() {
                 println!("may_recv {:?}", s.handle());
-                let data = s.recv(|buffer| {
-                    let data = buffer.to_owned();
-                    (data.len(), data)
-                }).unwrap();
+                let data = s
+                    .recv(|buffer| {
+                        let data = buffer.to_owned();
+                        (data.len(), data)
+                    })
+                    .unwrap();
                 println!("data {:?}", data);
                 if let Some(leaf) = self.leaf_map.get_mut(&s.handle()) {
                     leaf.try_send(data);
@@ -70,7 +79,7 @@ impl SocketSet {
 }
 
 fn new_tcp_socket() -> socket::TcpSocket<'static> {
-    use smoltcp::socket::{TcpSocketBuffer, TcpSocket};
+    use smoltcp::socket::{TcpSocket, TcpSocketBuffer};
     let rx_buffer = TcpSocketBuffer::new(vec![0; 2048]);
     let tx_buffer = TcpSocketBuffer::new(vec![0; 2048]);
     let mut tcp = TcpSocket::new(rx_buffer, tx_buffer);
@@ -81,14 +90,11 @@ fn new_tcp_socket() -> socket::TcpSocket<'static> {
 }
 
 fn new_raw_socket() -> socket::RawSocket<'static, 'static> {
-    use smoltcp::socket::{RawSocket, RawSocketBuffer, RawPacketMetadata};
-    use smoltcp::wire::{IpVersion, IpProtocol};
+    use smoltcp::socket::{RawPacketMetadata, RawSocket, RawSocketBuffer};
+    use smoltcp::wire::{IpProtocol, IpVersion};
     let rx_buffer = RawSocketBuffer::new(vec![RawPacketMetadata::EMPTY; 4], vec![0; 2048]);
     let tx_buffer = RawSocketBuffer::new(vec![RawPacketMetadata::EMPTY; 4], vec![0; 2048]);
-    let raw = RawSocket::new(
-        IpVersion::Ipv4, IpProtocol::Udp,
-        rx_buffer, tx_buffer
-    );
+    let raw = RawSocket::new(IpVersion::Ipv4, IpProtocol::Udp, rx_buffer, tx_buffer);
 
     raw
 }

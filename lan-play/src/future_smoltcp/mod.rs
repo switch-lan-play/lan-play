@@ -1,24 +1,27 @@
 mod peekable_receiver;
-mod socket;
-mod socketset;
 mod raw_udp;
 mod reactor;
+mod socket;
+mod socketset;
 
-use socketset::SocketSet;
-use smoltcp::{
-    iface::{EthernetInterfaceBuilder, NeighborCache, EthernetInterface as SmoltcpEthernetInterface, Routes},
-    wire::{EthernetAddress, IpCidr, Ipv4Address},
-    time::Instant,
-    phy::{DeviceCapabilities, RxToken, TxToken},
-};
-use std::collections::BTreeMap;
-use tokio::sync::mpsc::{self, error::TryRecvError};
-use peekable_receiver::PeekableReceiver;
 use crate::rawsock_socket::RawsockInterface;
-pub use socket::{Socket, TcpListener, TcpSocket, UdpSocket, SocketHandle};
-use std::sync::{Arc, Mutex};
-use reactor::{NetReactor, ReactorRunner};
+use peekable_receiver::PeekableReceiver;
 pub use raw_udp::OwnedUdp;
+use reactor::{NetReactor, ReactorRunner};
+use smoltcp::{
+    iface::{
+        EthernetInterface as SmoltcpEthernetInterface, EthernetInterfaceBuilder, NeighborCache,
+        Routes,
+    },
+    phy::{DeviceCapabilities, RxToken, TxToken},
+    time::Instant,
+    wire::{EthernetAddress, IpCidr, Ipv4Address},
+};
+pub use socket::{Socket, SocketHandle, TcpListener, TcpSocket, UdpSocket};
+use socketset::SocketSet;
+use std::collections::BTreeMap;
+use std::sync::{Arc, Mutex};
+use tokio::sync::mpsc::{self, error::TryRecvError};
 
 type Packet = Vec<u8>;
 pub type OutPacket = (SocketHandle, Packet);
@@ -36,7 +39,12 @@ pub struct Net {
 }
 
 impl Net {
-    pub fn new(ethernet_addr: EthernetAddress, ip_addrs: Vec<IpCidr>, gateway_ip: Ipv4Address, interf: RawsockInterface) -> Net {
+    pub fn new(
+        ethernet_addr: EthernetAddress,
+        ip_addrs: Vec<IpCidr>,
+        gateway_ip: Ipv4Address,
+        interf: RawsockInterface,
+    ) -> Net {
         let (event_tx, event_rx) = mpsc::channel(1);
         let (packet_sender, packet_receiver) = mpsc::channel(1);
 
@@ -54,18 +62,17 @@ impl Net {
             .routes(routes)
             .finalize();
 
-        let socket_set = Arc::new(Mutex::new(
-            SocketSet::new(event_tx, packet_sender)
-        ));
+        let socket_set = Arc::new(Mutex::new(SocketSet::new(event_tx, packet_sender)));
         let reactor = NetReactor::new(socket_set);
         let r = reactor.clone();
         tokio::spawn(async move {
             r.run(ReactorRunner {
                 ethernet,
                 packet_receiver,
-            }).await
+            })
+            .await
         });
-        
+
         Net {
             event_stream: event_rx,
             reactor,
@@ -105,7 +112,8 @@ pub struct FutureRxToken(Packet);
 
 impl RxToken for FutureRxToken {
     fn consume<R, F>(mut self, _timestamp: Instant, f: F) -> smoltcp::Result<R>
-        where F: FnOnce(&mut [u8]) -> smoltcp::Result<R>
+    where
+        F: FnOnce(&mut [u8]) -> smoltcp::Result<R>,
     {
         let p = &mut self.0;
         let result = f(p);
@@ -113,12 +121,12 @@ impl RxToken for FutureRxToken {
     }
 }
 
-
 pub struct FutureTxToken(mpsc::Sender<Packet>);
 
 impl TxToken for FutureTxToken {
     fn consume<R, F>(self, _timestamp: Instant, len: usize, f: F) -> smoltcp::Result<R>
-        where F: FnOnce(&mut [u8]) -> smoltcp::Result<R>
+    where
+        F: FnOnce(&mut [u8]) -> smoltcp::Result<R>,
     {
         let mut buffer = vec![0u8; len];
         let result = f(&mut buffer);
@@ -132,17 +140,13 @@ impl TxToken for FutureTxToken {
     }
 }
 
-impl<'d> smoltcp::phy::Device<'d> for FutureDevice
-where
-{
+impl<'d> smoltcp::phy::Device<'d> for FutureDevice {
     type RxToken = FutureRxToken;
     type TxToken = FutureTxToken;
 
     fn receive(&'d mut self) -> Option<(Self::RxToken, Self::TxToken)> {
         match self.receiver.try_recv() {
-            Ok(packet) => Some(
-                (FutureRxToken(packet), FutureTxToken(self.sender.clone()))
-            ),
+            Ok(packet) => Some((FutureRxToken(packet), FutureTxToken(self.sender.clone()))),
             Err(TryRecvError::Empty) => None,
             Err(TryRecvError::Closed) => todo!("handle receiver closed"),
         }

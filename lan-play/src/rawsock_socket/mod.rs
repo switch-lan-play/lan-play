@@ -1,6 +1,6 @@
-mod interface;
-mod error;
 mod device;
+mod error;
+mod interface;
 
-pub use interface::{RawsockInterfaceSet, RawsockInterface};
 pub use error::{Error, ErrorWithDesc};
+pub use interface::{RawsockInterface, RawsockInterfaceSet};

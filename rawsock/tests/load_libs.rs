@@ -9,25 +9,25 @@ These tests require correct environmental setup to pass.
 
 use rawsock::traits::Library;
 #[allow(unused_imports)]
-use rawsock::{pcap, wpcap, pfring};
+use rawsock::{pcap, pfring, wpcap};
 
 #[test]
 #[ignore]
 #[cfg(unix)]
-fn load_pcap(){
+fn load_pcap() {
     let _lib = pcap::Library::open_default_paths().expect("Could not load pcap");
 }
 
 #[test]
 #[ignore]
 #[cfg(windows)]
-fn load_wpcap(){
+fn load_wpcap() {
     let _lib = wpcap::Library::open_default_paths().expect("Could not load pcap");
 }
 
 #[test]
 #[ignore]
 #[cfg(all(unix, not(any(target_os = "macos", target_os = "ios"))))]
-fn load_pfring(){
+fn load_pfring() {
     let _lib = pfring::Library::open_default_paths().expect("Could not load pcap");
 }

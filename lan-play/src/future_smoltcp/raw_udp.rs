@@ -1,5 +1,10 @@
-use smoltcp::{wire::{UdpPacket, UdpRepr, Ipv4Packet, Ipv4Repr, IpEndpoint, IpAddress, Ipv4Address, IpProtocol}, Result};
 pub use smoltcp::phy::ChecksumCapabilities;
+use smoltcp::{
+    wire::{
+        IpAddress, IpEndpoint, IpProtocol, Ipv4Address, Ipv4Packet, Ipv4Repr, UdpPacket, UdpRepr,
+    },
+    Result,
+};
 use std::net::{SocketAddr, SocketAddrV4};
 
 #[derive(Debug)]
@@ -70,10 +75,7 @@ impl OwnedUdp {
 
 pub fn endpoint2socketaddr(ep: &IpEndpoint) -> SocketAddr {
     let ip = ep.addr.unwrap_v4();
-    SocketAddr::V4(SocketAddrV4::new(
-        ip.0.into(),
-        ep.port,
-    ))
+    SocketAddr::V4(SocketAddrV4::new(ip.0.into(), ep.port))
 }
 
 pub fn parse_udp_owned(data: &[u8], checksum_caps: &ChecksumCapabilities) -> Result<OwnedUdp> {
@@ -91,8 +93,9 @@ pub fn parse_udp<'a>(data: &'a [u8], checksum_caps: &ChecksumCapabilities) -> Re
     let udp_packet = UdpPacket::new_checked(ipv4_packet.payload())?;
     let udp_repr = UdpRepr::parse(
         &udp_packet,
-        &ipv4_repr.src_addr.into(), &ipv4_repr.dst_addr.into(),
-        checksum_caps
+        &ipv4_repr.src_addr.into(),
+        &ipv4_repr.dst_addr.into(),
+        checksum_caps,
     )?;
     let src = IpEndpoint {
         addr: ipv4_repr.src_addr.into(),
@@ -103,10 +106,5 @@ pub fn parse_udp<'a>(data: &'a [u8], checksum_caps: &ChecksumCapabilities) -> Re
         port: udp_repr.dst_port,
     };
     let data = udp_repr.payload;
-    Ok(Udp {
-        src,
-        dst,
-        data
-    })
+    Ok(Udp { src, dst, data })
 }
- 

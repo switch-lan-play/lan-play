@@ -1,13 +1,13 @@
-use futures::select;
+use super::{Ethernet, OutPacket, Socket, SocketHandle, SocketSet, TcpListener};
 use futures::prelude::*;
-use tokio::time::delay_for;
-use tokio::sync::mpsc::{self, error::TryRecvError};
-use super::{Ethernet, OutPacket, SocketSet, Socket, TcpListener, SocketHandle};
-use std::sync::{Arc, Mutex, MutexGuard};
-use smoltcp::time::{Instant, Duration};
-use std::task::{Waker, Poll};
+use futures::select;
+use smoltcp::time::{Duration, Instant};
 use std::collections::HashMap;
 use std::io;
+use std::sync::{Arc, Mutex, MutexGuard};
+use std::task::{Poll, Waker};
+use tokio::sync::mpsc::{self, error::TryRecvError};
+use tokio::time::delay_for;
 
 #[derive(Debug)]
 pub struct Wakers {
@@ -23,7 +23,6 @@ pub struct ReactorRunner {
     pub ethernet: Ethernet,
     pub packet_receiver: mpsc::Receiver<OutPacket>,
 }
-
 
 #[derive(Clone)]
 pub(super) struct NetReactor {
@@ -76,7 +75,7 @@ impl NetReactor {
     pub fn new(socket_set: Arc<Mutex<SocketSet>>) -> NetReactor {
         NetReactor {
             socket_set,
-            sources: Arc::new(Mutex::new(HashMap::new()))
+            sources: Arc::new(Mutex::new(HashMap::new())),
         }
     }
     pub async fn lock_set(&self) -> MutexGuard<'_, SocketSet> {
@@ -87,7 +86,7 @@ impl NetReactor {
             wakers: Mutex::new(Wakers {
                 readers: Vec::new(),
                 writers: Vec::new(),
-            })
+            }),
         });
         self.sources.lock().unwrap().insert(handle, source.clone());
         source
@@ -106,10 +105,9 @@ impl NetReactor {
         loop {
             let start = Instant::now();
             let deadline = {
-                ethernet.poll_delay(
-                    sockets.lock().unwrap().as_set_mut(),
-                    start
-                ).unwrap_or(default_timeout)
+                ethernet
+                    .poll_delay(sockets.lock().unwrap().as_set_mut(), start)
+                    .unwrap_or(default_timeout)
             };
             let device = ethernet.device_mut();
 
@@ -126,30 +124,25 @@ impl NetReactor {
             }
             let end = Instant::now();
             let mut set = sockets.lock().unwrap();
-            let readiness = match ethernet.poll(
-                set.as_set_mut(),
-                end
-            ) {
+            let readiness = match ethernet.poll(set.as_set_mut(), end) {
                 Ok(b) => b,
                 Err(e) => {
                     log::error!("poll error {:?}", e);
                     true
-                },
+                }
             };
 
-            if !readiness { continue }
+            if !readiness {
+                continue;
+            }
 
             let mut ready = Vec::new();
-            let sources= self.sources.lock().unwrap();
+            let sources = self.sources.lock().unwrap();
             for socket in set.as_set_mut().iter() {
                 let (readable, writable) = match socket {
-                    smoltcp::socket::Socket::Tcp(tcp) => {
-                        (tcp.can_recv(), tcp.can_send())
-                    }
-                    smoltcp::socket::Socket::Raw(raw) => {
-                        (raw.can_recv(), raw.can_send())
-                    }
-                    _ => continue // ignore other type
+                    smoltcp::socket::Socket::Tcp(tcp) => (tcp.can_recv(), tcp.can_send()),
+                    smoltcp::socket::Socket::Raw(raw) => (raw.can_recv(), raw.can_send()),
+                    _ => continue, // ignore other type
                 };
                 let handle = socket.handle();
 

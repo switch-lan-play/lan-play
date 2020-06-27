@@ -1,24 +1,27 @@
-#[macro_use] extern crate cfg_if;
-#[macro_use] extern crate lazy_static;
-#[macro_use] extern crate async_trait;
+#[macro_use]
+extern crate cfg_if;
+#[macro_use]
+extern crate lazy_static;
+#[macro_use]
+extern crate async_trait;
 
-mod rawsock_socket;
-mod interface_info;
-mod proxy;
-mod lan_play;
 mod error;
 mod future_smoltcp;
 mod gateway;
+mod interface_info;
+mod lan_play;
+mod proxy;
+mod rawsock_socket;
 
-use rawsock_socket::RawsockInterfaceSet;
-use smoltcp::wire::Ipv4Cidr;
-use rawsock::traits::Library;
+use error::Result;
 use lan_play::LanPlay;
 use proxy::DirectProxy;
-use error::Result;
+use rawsock::traits::Library;
+use rawsock_socket::RawsockInterfaceSet;
+use smoltcp::wire::Ipv4Cidr;
 use std::net::Ipv4Addr;
-use structopt::StructOpt;
 use std::sync::Arc;
+use structopt::StructOpt;
 
 /// Lan play
 #[derive(Debug, StructOpt)]
@@ -30,7 +33,7 @@ struct Opt {
     #[structopt(short, long, default_value = "16")]
     prefix_len: u8,
     /// Network interface
-    #[structopt(short="i", long, env = "LP_NETIF")]
+    #[structopt(short = "i", long, env = "LP_NETIF")]
     netif: Option<String>,
 }
 
@@ -61,11 +64,7 @@ async fn main() -> Result<()> {
     let set = RawsockInterfaceSet::new(&RAWSOCK_LIB, ipv4cidr)
         .expect("Could not open any packet capturing library");
 
-    let mut lp = LanPlay::new(
-        DirectProxy::new(),
-        ipv4cidr,
-        gateway_ip,
-    );
+    let mut lp = LanPlay::new(DirectProxy::new(), ipv4cidr, gateway_ip);
 
     lp.start(&set, opt.netif).await?;
 

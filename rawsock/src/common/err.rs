@@ -1,8 +1,8 @@
-use std::error::Error as ErrorTrait;
-use std::fmt::{Display, Result as FmtResult, Formatter};
-use std::convert::From;
 use dlopen::Error as DlopenError;
+use std::convert::From;
+use std::error::Error as ErrorTrait;
 use std::ffi::NulError;
+use std::fmt::{Display, Formatter, Result as FmtResult};
 
 /// Error enumeration returned by this crate.
 #[derive(Debug)]
@@ -21,7 +21,7 @@ pub enum Error {
     GettingDeviceDescriptionList(String),
     ///No paths were provided by the user
     NoPathsProvided,
-    LibraryError(String)
+    LibraryError(String),
 }
 
 impl ErrorTrait for Error {
@@ -34,34 +34,34 @@ impl ErrorTrait for Error {
             Error::SendingPacket(ref txt) => txt,
             Error::GettingDeviceDescriptionList(ref txt) => txt,
             Error::NoPathsProvided => "No library paths were provided.",
-            Error::LibraryError(ref txt) => txt
+            Error::LibraryError(ref txt) => txt,
         }
     }
 }
 
 impl Display for Error {
     fn fmt(&self, f: &mut Formatter) -> FmtResult {
-        match * self {
+        match *self {
             Error::DllError(ref err) => err.fmt(f),
             Error::NullCharacter(ref err) => err.fmt(f),
-            Error::OpeningInterface(ref txt)=> f.write_str(txt),
+            Error::OpeningInterface(ref txt) => f.write_str(txt),
             Error::ReceivingPacket(ref txt) => f.write_str(txt),
             Error::SendingPacket(ref txt) => f.write_str(txt),
             Error::GettingDeviceDescriptionList(ref txt) => f.write_str(txt),
             Error::NoPathsProvided => f.write_str("No library paths were provided."),
-            Error::LibraryError(ref txt) => f.write_str(txt)
+            Error::LibraryError(ref txt) => f.write_str(txt),
         }
     }
 }
 
 impl From<::dlopen::Error> for Error {
-    fn from(err: DlopenError) -> Error{
+    fn from(err: DlopenError) -> Error {
         Error::DllError(err)
     }
 }
 
 impl From<NulError> for Error {
-    fn from(err: NulError) -> Error{
+    fn from(err: NulError) -> Error {
         Error::NullCharacter(err)
     }
 }

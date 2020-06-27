@@ -1,9 +1,9 @@
-use time::Timespec;
+use std::fmt::{Display, Error as FmtError, Formatter, LowerHex};
 use std::ops::Deref;
-use std::fmt::{Display, Formatter, Error as FmtError, LowerHex};
+use time::Timespec;
 
 ///Trait for obtained packets - common part between borrowed and owned versions.
-pub trait Packet : Deref<Target=[u8]> + Display{
+pub trait Packet: Deref<Target = [u8]> + Display {
     ///Returns the time when this packet was received.
     fn when(&self) -> Timespec;
 }
@@ -12,14 +12,14 @@ pub trait Packet : Deref<Target=[u8]> + Display{
 #[derive(Debug)]
 pub struct BorrowedPacket<'a> {
     when_received: Timespec,
-    packet: &'a[u8],
+    packet: &'a [u8],
     //_marker: PhantomData<&'a mut u32>
 }
 
 impl<'a> BorrowedPacket<'a> {
     ///Creates a new Packet instance.
-    pub fn new(when_received: Timespec, data: &'a[u8]) -> BorrowedPacket<'a> {
-        BorrowedPacket{
+    pub fn new(when_received: Timespec, data: &'a [u8]) -> BorrowedPacket<'a> {
+        BorrowedPacket {
             when_received,
             packet: data,
             //_marker: PhantomData
@@ -44,7 +44,6 @@ impl<'a> Deref for BorrowedPacket<'a> {
 }
 
 impl<'a> Packet for BorrowedPacket<'a> {
-
     fn when(&self) -> Timespec {
         self.when_received
     }
@@ -62,11 +61,10 @@ impl<'a> Display for BorrowedPacket<'a> {
 ///Structure representing obtained raw packet - owned version.
 pub struct OwnedPacket {
     when_received: Timespec,
-    packet: Vec<u8>
+    packet: Vec<u8>,
 }
 
-impl Packet for OwnedPacket{
-
+impl Packet for OwnedPacket {
     fn when(&self) -> Timespec {
         self.when_received
     }
@@ -91,10 +89,10 @@ impl Display for OwnedPacket {
 
 impl OwnedPacket {
     ///Creates owned packet from provided data.
-    pub fn new (data: &[u8], when: Timespec) -> Self{
+    pub fn new(data: &[u8], when: Timespec) -> Self {
         OwnedPacket {
             packet: data.into(),
-            when_received: when
+            when_received: when,
         }
     }
 

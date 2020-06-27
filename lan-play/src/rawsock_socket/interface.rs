@@ -1,14 +1,14 @@
+use super::device::Packet;
+use super::{Error, ErrorWithDesc};
 use crate::interface_info::{get_interface_info, InterfaceInfo};
 use rawsock::traits::{DynamicInterface, Library};
 use rawsock::InterfaceDescription;
 use smoltcp::wire::{EthernetAddress, Ipv4Cidr};
-use std::thread;
-use super::device::Packet;
-use super::{Error, ErrorWithDesc};
 use std::ffi::CString;
-use tokio::sync::mpsc::{channel, Sender, Receiver};
-use tokio::task;
 use std::sync::Arc;
+use std::thread;
+use tokio::sync::mpsc::{channel, Receiver, Sender};
+use tokio::task;
 
 type Interface = std::sync::Arc<dyn DynamicInterface<'static> + 'static>;
 pub struct RawsockInterface {
@@ -19,19 +19,25 @@ pub struct RawsockInterface {
 }
 
 impl RawsockInterface {
-    fn new(slf: &RawsockInterfaceSet, desc: &mut InterfaceDescription) -> Result<RawsockInterface, Error> {
+    fn new(
+        slf: &RawsockInterfaceSet,
+        desc: &mut InterfaceDescription,
+    ) -> Result<RawsockInterface, Error> {
         let name = &desc.name;
         let mut interface = slf.lib.open_interface_arc(name)?;
-        std::sync::Arc::get_mut(&mut interface).ok_or(Error::Other("Bad Arc"))?.set_filter_cstr(&slf.filter)?;
+        std::sync::Arc::get_mut(&mut interface)
+            .ok_or(Error::Other("Bad Arc"))?
+            .set_filter_cstr(&slf.filter)?;
 
         let data_link = interface.data_link();
-        if let rawsock::DataLink::Ethernet = data_link {} else {
+        if let rawsock::DataLink::Ethernet = data_link {
+        } else {
             return Err(Error::WrongDataLink(data_link));
         }
         let InterfaceInfo {
             ethernet_address: mac,
             name: _,
-            description
+            description,
         } = get_interface_info(name)?;
         if let Some(description) = description {
             desc.description = description;
@@ -53,23 +59,23 @@ impl RawsockInterface {
     pub fn data_link(&self) -> rawsock::DataLink {
         self.data_link
     }
-    pub fn start(self) -> (tokio::task::JoinHandle<()>, Sender<Packet>, Receiver<Packet>) {
+    pub fn start(
+        self,
+    ) -> (
+        tokio::task::JoinHandle<()>,
+        Sender<Packet>,
+        Receiver<Packet>,
+    ) {
         let interface = self.interface;
         let (packet_sender, stream) = channel::<Packet>(2);
         let (sink, packet_receiver) = channel::<Packet>(2);
 
         Self::start_thread(interface.clone(), packet_sender);
-        let running = task::spawn(Self::run(
-            interface,
-            packet_receiver,
-        ));
+        let running = task::spawn(Self::run(interface, packet_receiver));
 
         (running, sink, stream)
     }
-    async fn run(
-        interface: Interface,
-        mut packet_receiver: Receiver<Packet>,
-    ) {
+    async fn run(interface: Interface, mut packet_receiver: Receiver<Packet>) {
         while let Some(data) = packet_receiver.recv().await {
             if let Err(e) = interface.send(&data) {
                 log::error!("Failed when sending packet {:?}", e);
@@ -79,11 +85,11 @@ impl RawsockInterface {
     fn start_thread(interface: Interface, mut packet_sender: Sender<Packet>) {
         log::debug!("recv thread start");
         thread::spawn(move || {
-            let r = interface.loop_infinite_dyn(&|packet| {
-                match futures::executor::block_on(packet_sender.send(packet.as_owned().to_vec())) {
-                    Ok(_) => {},
-                    Err(err) => log::warn!("recv error: {:?}", err)
-                }
+            let r = interface.loop_infinite_dyn(&|packet| match futures::executor::block_on(
+                packet_sender.send(packet.as_owned().to_vec()),
+            ) {
+                Ok(_) => {}
+                Err(err) => log::warn!("recv error: {:?}", err),
             });
             if !r.is_ok() {
                 log::warn!("loop_infinite {:?}", r);
@@ -99,7 +105,10 @@ pub struct RawsockInterfaceSet {
     filter: CString,
 }
 impl RawsockInterfaceSet {
-    pub fn new(lib: &'static Box<dyn Library>, ip: Ipv4Cidr) -> Result<RawsockInterfaceSet, rawsock::Error> {
+    pub fn new(
+        lib: &'static Box<dyn Library>,
+        ip: Ipv4Cidr,
+    ) -> Result<RawsockInterfaceSet, rawsock::Error> {
         let all_interf = lib.all_interfaces()?;
         let filter = format!("net {}", ip.network());
         log::debug!("filter: {}", filter);
@@ -117,10 +126,16 @@ impl RawsockInterfaceSet {
             .partition(Result::is_ok);
         (
             opened.into_iter().map(Result::unwrap).collect::<Vec<_>>(),
-            errored.into_iter().map(|i| i.err().unwrap()).collect::<Vec<_>>()
+            errored
+                .into_iter()
+                .map(|i| i.err().unwrap())
+                .collect::<Vec<_>>(),
         )
     }
-    fn open_interface(&self, mut desc: InterfaceDescription) -> Result<RawsockInterface, ErrorWithDesc> {
-        RawsockInterface::new(self, &mut desc).map_err(|err| { ErrorWithDesc(err, desc) })
+    fn open_interface(
+        &self,
+        mut desc: InterfaceDescription,
+    ) -> Result<RawsockInterface, ErrorWithDesc> {
+        RawsockInterface::new(self, &mut desc).map_err(|err| ErrorWithDesc(err, desc))
     }
 }

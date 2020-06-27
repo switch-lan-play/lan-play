@@ -1,12 +1,20 @@
-use tokio::io::{self, AsyncRead, AsyncWrite, StreamReader, stream_reader};
-use tokio::sync::mpsc;
+use super::{
+    raw_udp::{parse_udp_owned, ChecksumCapabilities, OwnedUdp},
+    reactor::Source,
+    NetReactor, OutPacket,
+};
+use bytes::Bytes;
+use futures::future::{BoxFuture, FutureExt};
+use futures::stream::{BoxStream, StreamExt};
 pub use smoltcp::socket::{self, SocketHandle, SocketRef};
 use smoltcp::Error;
-use futures::stream::{BoxStream, StreamExt};
-use futures::future::{BoxFuture, FutureExt};
-use std::{pin::Pin, task::{Poll, Context}, sync::Arc};
-use bytes::Bytes;
-use super::{NetReactor, OutPacket, reactor::Source, raw_udp::{OwnedUdp, parse_udp_owned, ChecksumCapabilities}};
+use std::{
+    pin::Pin,
+    sync::Arc,
+    task::{Context, Poll},
+};
+use tokio::io::{self, stream_reader, AsyncRead, AsyncWrite, StreamReader};
+use tokio::sync::mpsc;
 
 pub type Packet = Bytes;
 
@@ -88,10 +96,11 @@ impl UdpSocket {
                 let mut set = self.reactor.lock_set().await;
                 let mut socket = set.as_set_mut().get::<socket::RawSocket>(self.handle);
                 if socket.can_recv() {
-                    return socket.recv()
+                    return socket
+                        .recv()
                         .map(|p| parse_udp_owned(p, &ChecksumCapabilities::default()))
                         .and_then(|x| x)
-                        .map_err(map_err)
+                        .map_err(map_err);
                 }
             }
             self.source.readable(&self.reactor).await?;
@@ -101,11 +110,13 @@ impl UdpSocket {
         loop {
             {
                 let mut set = self.reactor.lock_set().await;
-                let mut socket = set.as_set_mut().get::<smoltcp::socket::RawSocket>(self.handle);
+                let mut socket = set
+                    .as_set_mut()
+                    .get::<smoltcp::socket::RawSocket>(self.handle);
                 if socket.can_send() {
                     match socket.send_slice(&data.to_raw()) {
-                        Err(Error::Exhausted) => {},
-                        res => return res.map_err(map_err)
+                        Err(Error::Exhausted) => {}
+                        res => return res.map_err(map_err),
                     }
                 }
             }
@@ -128,15 +139,8 @@ impl SocketLeaf {
 impl TcpSocket {
     pub(super) fn new(handle: SocketHandle, reactor: NetReactor) -> (Self, SocketLeaf) {
         let (tx, rx) = mpsc::channel(10);
-        let reader = stream_reader(
-            rx.map(|x| Ok(x)).boxed()
-        );
-        (TcpSocket {
-            handle,
-            reactor,
-        }, SocketLeaf {
-            tx
-        })
+        let reader = stream_reader(rx.map(|x| Ok(x)).boxed());
+        (TcpSocket { handle, reactor }, SocketLeaf { tx })
     }
 }
 

@@ -1,24 +1,20 @@
-use super::{Proxy, socket, SocketAddr, BoxTcp, BoxUdp, BoxProxy, other};
-use tokio::task::{self, JoinHandle};
-use tokio::net::{TcpStream, UdpSocket};
+use super::{other, socket, BoxProxy, BoxTcp, BoxUdp, Proxy, SocketAddr};
+use async_socks5::{connect, AddrKind, Auth, SocksDatagram};
 use tokio::io;
-use async_socks5::{connect, Auth, AddrKind, SocksDatagram};
+use tokio::net::{TcpStream, UdpSocket};
+use tokio::task::{self, JoinHandle};
 
 #[async_trait]
 impl socket::Udp for SocksDatagram<TcpStream> {
     async fn send_to(&mut self, buf: &[u8], addr: SocketAddr) -> io::Result<usize> {
-        SocksDatagram::send_to(self, buf, addr)
-            .await
-            .map_err(other)
+        SocksDatagram::send_to(self, buf, addr).await.map_err(other)
     }
     async fn recv_from(&mut self, buf: &mut [u8]) -> io::Result<(usize, SocketAddr)> {
         SocksDatagram::recv_from(self, buf)
             .await
             .map_err(other)
             .and_then(|(size, addr)| match addr {
-                AddrKind::Ip(addr) => {
-                    Ok((size, addr))
-                },
+                AddrKind::Ip(addr) => Ok((size, addr)),
                 AddrKind::Domain(domain, port) => {
                     let err = format!("Socks5 udp recv_from get domain {}:{}", domain, port);
                     Err(other(err))
@@ -34,10 +30,7 @@ pub struct Socks5Proxy {
 
 impl Socks5Proxy {
     pub fn new(server: SocketAddr, auth: Option<Auth>) -> BoxProxy {
-        Box::new(Self {
-            server,
-            auth,
-        })
+        Box::new(Self { server, auth })
     }
 }
 
@@ -53,10 +46,10 @@ impl Proxy for Socks5Proxy {
     async fn new_udp(&self, addr: SocketAddr) -> io::Result<BoxUdp> {
         let proxy_stream = TcpStream::connect(self.server.clone()).await?;
         let socket = UdpSocket::bind(addr).await?;
-        let udp = SocksDatagram
-            ::associate(proxy_stream, socket, self.auth.clone(), None::<SocketAddr>)
-            .await
-            .map_err(other)?;
+        let udp =
+            SocksDatagram::associate(proxy_stream, socket, self.auth.clone(), None::<SocketAddr>)
+                .await
+                .map_err(other)?;
 
         Ok(Box::new(udp))
     }
@@ -64,23 +57,26 @@ impl Proxy for Socks5Proxy {
 
 #[cfg(test)]
 pub mod test {
-    use fast_socks5::server::{Config, Socks5Socket};
-    use async_std::task::JoinHandle;
-    use std::io;
     use async_std::net::TcpListener;
+    use async_std::task::JoinHandle;
+    use fast_socks5::server::{Config, Socks5Socket};
+    use std::io;
 
     pub async fn socks5_server() -> (JoinHandle<io::Result<()>>, u16) {
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let port = listener.local_addr().unwrap().port();
         let config = Config::default();
-        (async_std::task::spawn(async move {
-            let (socket, _) = listener.accept().await?;
-            let socket = Socks5Socket::new(socket, std::sync::Arc::new(config));
-            socket
-                .upgrade_to_socks5()
-                .await
-                .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
-            Ok(())
-        }), port)
+        (
+            async_std::task::spawn(async move {
+                let (socket, _) = listener.accept().await?;
+                let socket = Socks5Socket::new(socket, std::sync::Arc::new(config));
+                socket
+                    .upgrade_to_socks5()
+                    .await
+                    .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+                Ok(())
+            }),
+            port,
+        )
     }
 }

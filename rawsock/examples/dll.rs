@@ -7,37 +7,41 @@
     functionality from your libraries.
 */
 
-extern crate rawsock;
 extern crate dlopen;
-use rawsock::pcap::dll::{SUCCESS, PCapDll, PCapInterface};
-use rawsock::pcap::dll::helpers::PCapErrBuf;
-use rawsock::pcap::DEFAULT_PATHS;
+extern crate rawsock;
 use dlopen::wrapper::Container;
-use std::ptr::null;
+use rawsock::pcap::dll::helpers::PCapErrBuf;
+use rawsock::pcap::dll::{PCapDll, PCapInterface, SUCCESS};
+use rawsock::pcap::DEFAULT_PATHS;
 use std::ffi::CStr;
+use std::ptr::null;
 
-fn open_library() -> Container<PCapDll>{
-    for path in &DEFAULT_PATHS{
-        match unsafe { Container::load(path)} {
-            Err(_)=> (),
-            Ok(lib) => return lib
+fn open_library() -> Container<PCapDll> {
+    for path in &DEFAULT_PATHS {
+        match unsafe { Container::load(path) } {
+            Err(_) => (),
+            Ok(lib) => return lib,
         }
     }
     panic!("Could not open the library")
 }
 
-fn main(){
+fn main() {
     let dll = open_library();
 
     //example: obtain list of devices directly (although rawsock API supports it too):
-    let mut interfs: * const PCapInterface = null();
+    let mut interfs: *const PCapInterface = null();
     let mut errbuf = PCapErrBuf::new();
-    assert_eq!(SUCCESS, unsafe {dll.pcap_findalldevs(&mut interfs, errbuf.buffer())});
+    assert_eq!(SUCCESS, unsafe {
+        dll.pcap_findalldevs(&mut interfs, errbuf.buffer())
+    });
     let mut curr = interfs;
     while !curr.is_null() {
-        let name = unsafe { CStr::from_ptr((*curr).name)}.to_string_lossy().into_owned();
+        let name = unsafe { CStr::from_ptr((*curr).name) }
+            .to_string_lossy()
+            .into_owned();
         println!("Found interface: {}", &name);
-        curr = unsafe{(*curr).next};
+        curr = unsafe { (*curr).next };
     }
-    unsafe {dll.pcap_freealldevs(interfs)}
+    unsafe { dll.pcap_freealldevs(interfs) }
 }

@@ -18,9 +18,7 @@ fn get_guid(s: &str) -> Option<&str> {
 
 fn from_u16(s: &[u16]) -> Option<String> {
     if let Some(pos) = s.iter().position(|c| *c == 0) {
-        if let Ok(string) =
-            String::from_utf16(&s[0..pos])
-        {
+        if let Ok(string) = String::from_utf16(&s[0..pos]) {
             return Some(string);
         }
     }
@@ -46,10 +44,7 @@ pub fn get_interface_info(name: &str) -> Result<InterfaceInfo, Error> {
 
             if GetIfTable(table, &mut size as *mut libc::c_ulong, false) == NO_ERROR {
                 let ptr: *const MibIfrow = (&(*table).table) as *const _;
-                let table = std::slice::from_raw_parts(
-                    ptr,
-                    (*table).dw_num_entries as usize
-                );
+                let table = std::slice::from_raw_parts(ptr, (*table).dw_num_entries as usize);
                 for i in table {
                     let row = &*i;
 
@@ -57,12 +52,15 @@ pub fn get_interface_info(name: &str) -> Result<InterfaceInfo, Error> {
                         if let Some(guid) = get_guid(&name) {
                             if guid == intf_guid {
                                 if row.dw_phys_addr_len == 6 {
-                                    info.ethernet_address = EthernetAddress::from_bytes(&row.b_phys_addr[0..6]);
+                                    info.ethernet_address =
+                                        EthernetAddress::from_bytes(&row.b_phys_addr[0..6]);
                                 } else {
                                     continue;
                                 }
                                 if row.dw_descr_len > 0 {
-                                    if let Ok(desc) = String::from_utf8(row.b_descr[..(row.dw_descr_len - 1) as usize].to_vec()) {
+                                    if let Ok(desc) = String::from_utf8(
+                                        row.b_descr[..(row.dw_descr_len - 1) as usize].to_vec(),
+                                    ) {
                                         info.description = Some(desc);
                                     }
                                 }
@@ -106,9 +104,5 @@ pub(crate) struct MibIftable {
 #[link(name = "iphlpapi")]
 #[allow(non_snake_case)]
 extern "system" {
-    pub(crate) fn GetIfTable(
-        table: *mut MibIftable,
-        size: *mut libc::c_ulong,
-        order: bool,
-    ) -> u32;
+    pub(crate) fn GetIfTable(table: *mut MibIftable, size: *mut libc::c_ulong, order: bool) -> u32;
 }

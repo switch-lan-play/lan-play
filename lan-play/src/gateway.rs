@@ -1,12 +1,12 @@
-use crate::proxy::{BoxProxy, BoxUdp, Udp2, other};
 use crate::future_smoltcp::{OwnedUdp, TcpListener, UdpSocket};
-use lru::LruCache;
-use tokio::sync::{Mutex, mpsc};
-use std::net::SocketAddr;
-use std::io;
-use std::sync::Arc;
-use futures::future::select_all;
+use crate::proxy::{other, BoxProxy, BoxUdp, Udp2};
 use drop_abort::{abortable, DropAbortHandle};
+use futures::future::select_all;
+use lru::LruCache;
+use std::io;
+use std::net::SocketAddr;
+use std::sync::Arc;
+use tokio::sync::{mpsc, Mutex};
 
 struct Inner {
     udp_cache: LruCache<SocketAddr, UdpConnection>,
@@ -52,7 +52,9 @@ impl Gateway {
         let mut inner = self.inner.lock().await;
         let src = udp.src();
         if !inner.udp_cache.contains(&src) {
-            inner.udp_cache.put(src, UdpConnection::new(&self.proxy, sender, src).await?);
+            inner
+                .udp_cache
+                .put(src, UdpConnection::new(&self.proxy, sender, src).await?);
         }
         let connection = inner.udp_cache.get_mut(&src).unwrap();
         connection.send_to(&udp.data, udp.dst()).await?;
@@ -66,22 +68,30 @@ struct UdpConnection {
 }
 
 impl UdpConnection {
-    async fn run(pudp: Arc<Udp2>, mut sender: mpsc::Sender<OwnedUdp>, src: SocketAddr) -> io::Result<()> {
+    async fn run(
+        pudp: Arc<Udp2>,
+        mut sender: mpsc::Sender<OwnedUdp>,
+        src: SocketAddr,
+    ) -> io::Result<()> {
         loop {
             let mut buf = vec![0; 2048];
             let (size, addr) = pudp.recv_from(&mut buf).await?;
             buf.truncate(size);
-            sender.send(OwnedUdp::new(addr, src, buf)).await.map_err(other)?;
+            sender
+                .send(OwnedUdp::new(addr, src, buf))
+                .await
+                .map_err(other)?;
         }
     }
-    async fn new(proxy: &BoxProxy, sender: mpsc::Sender<OwnedUdp>, src: SocketAddr) -> io::Result<UdpConnection> {
+    async fn new(
+        proxy: &BoxProxy,
+        sender: mpsc::Sender<OwnedUdp>,
+        src: SocketAddr,
+    ) -> io::Result<UdpConnection> {
         let pudp: Arc<Udp2> = Arc::new(proxy.new_udp("0.0.0.0:0".parse().unwrap()).await?.into());
         let (fut, _handle) = abortable(UdpConnection::run(pudp.clone(), sender, src));
         tokio::spawn(fut);
-        Ok(UdpConnection {
-            pudp,
-            _handle,
-        })
+        Ok(UdpConnection { pudp, _handle })
     }
     async fn send_to(&self, buf: &[u8], addr: SocketAddr) -> io::Result<usize> {
         self.pudp.send_to(buf, addr).await

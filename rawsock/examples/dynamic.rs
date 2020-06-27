@@ -8,24 +8,30 @@
 
 extern crate rawsock;
 mod commons;
-use rawsock::open_best_library;
 use self::commons::ICMP_PACKET;
+use rawsock::open_best_library;
 
 fn main() {
     println!("Opening packet capturing library");
     let lib = open_best_library().expect("Could not open any packet capturing library");
     println!("Library opened, version is {}", lib.version());
-    let interf_name = lib.all_interfaces()
-        .expect("Could not obtain interface list").first()
-        .expect("There are no available interfaces").name.clone();
+    let interf_name = lib
+        .all_interfaces()
+        .expect("Could not obtain interface list")
+        .first()
+        .expect("There are no available interfaces")
+        .name
+        .clone();
     println!("Opening the {} interface", &interf_name);
-    let mut interf = lib.open_interface(&interf_name).expect("Could not open network interface");
+    let mut interf = lib
+        .open_interface(&interf_name)
+        .expect("Could not open network interface");
     println!("Interface opened, data link: {}", interf.data_link());
 
     //send some packets
     println!("Sending 5 packets:");
-    for i in 0..5{
-        println!("Sending ICMP ping packet no {}",i);
+    for i in 0..5 {
+        println!("Sending ICMP ping packet no {}", i);
         interf.send(&ICMP_PACKET).expect("Could not send packet");
     }
 

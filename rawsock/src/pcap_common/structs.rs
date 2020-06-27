@@ -1,42 +1,39 @@
-use std::ffi::{CStr};
-use libc::{c_char, c_void, c_uint, c_uchar, c_ushort, timeval};
-use std::mem::uninitialized;
+use super::constants::ERRBUF_SIZE;
 use crate::common::InterfaceDescription;
 use crate::utils::cstr_to_string;
-use super::constants::ERRBUF_SIZE;
-
+use libc::{c_char, c_uchar, c_uint, c_ushort, c_void, timeval};
+use std::ffi::CStr;
+use std::mem::uninitialized;
 
 ///Raw PCap handle - created only to allow construction of pointers.
 pub enum PCapHandle {}
 
-
 ///Raw PCap duper handle - created only to allow construction of pointers.
 pub enum PCapDumper {}
 
-
 ///Wrapper around pcap error buffer
 pub struct PCapErrBuf {
-    buffer: [c_char; ERRBUF_SIZE]
+    buffer: [c_char; ERRBUF_SIZE],
 }
 
 ///Wrapper over unsafe pcap error buffer
-impl PCapErrBuf{
+impl PCapErrBuf {
     ///Converts current content to a string
     pub fn as_string(&self) -> String {
-        unsafe{
-            CStr::from_ptr(self.buffer.as_ptr())
-        }.to_string_lossy().into_owned()
+        unsafe { CStr::from_ptr(self.buffer.as_ptr()) }
+            .to_string_lossy()
+            .into_owned()
     }
 
     ///Returns pointer to the underlying buffer.
-    pub fn buffer(&mut self) -> * mut c_char {
+    pub fn buffer(&mut self) -> *mut c_char {
         self.buffer.as_mut_ptr()
     }
 
     ///Creates a new instance.
-    pub fn new () -> PCapErrBuf {
+    pub fn new() -> PCapErrBuf {
         PCapErrBuf {
-            buffer: unsafe{uninitialized()}
+            buffer: unsafe { uninitialized() },
         }
     }
 }
@@ -44,11 +41,11 @@ impl PCapErrBuf{
 ///Equivalent of pcap_interf_t
 #[repr(C)]
 pub struct PCapInterface {
-    pub next: * const PCapInterface,
-    pub name: * const c_char, /* name to hand to "pcap_open_live()" */
-    pub description: * const c_char,	/* textual description of interface, or NULL */
-    pub addresses: * const c_void,
-    pub flags: c_uint	/* PCAP_IF_ interface flags */
+    pub next: *const PCapInterface,
+    pub name: *const c_char,        /* name to hand to "pcap_open_live()" */
+    pub description: *const c_char, /* textual description of interface, or NULL */
+    pub addresses: *const c_void,
+    pub flags: c_uint, /* PCAP_IF_ interface flags */
 }
 
 ///Equivalent of C struct pcap_pkthdr
@@ -63,29 +60,30 @@ pub struct PCapPacketHeader {
     have additional field and without this definition there is stack corruption in some cases.
     */
     #[cfg(any(target_os = "macos", target_os = "ios"))]
-    pub comment: [c_char; 256]
+    pub comment: [c_char; 256],
 }
 
 ///Equivalent of pcap_direction_t
 /// #[repr(u32)]
 pub enum PCapDirection {
-    InOut    = 0,
-    In       = 1,
-    Out      = 2,
+    InOut = 0,
+    In = 1,
+    Out = 2,
 }
 
-pub type PCapHandler=extern "C" fn(user: * mut c_uchar, h: * const PCapPacketHeader, bytes: * const c_uchar);
+pub type PCapHandler =
+    extern "C" fn(user: *mut c_uchar, h: *const PCapPacketHeader, bytes: *const c_uchar);
 
-pub fn interface_data_from_pcap_list(interfs: * const PCapInterface) -> Vec<InterfaceDescription> {
+pub fn interface_data_from_pcap_list(interfs: *const PCapInterface) -> Vec<InterfaceDescription> {
     let mut interfs_descr = Vec::new();
     let mut curr = interfs;
     while !curr.is_null() {
         let id = InterfaceDescription {
-            name: cstr_to_string(unsafe{(*curr).name}),
-            description: cstr_to_string(unsafe{(*curr).description})
+            name: cstr_to_string(unsafe { (*curr).name }),
+            description: cstr_to_string(unsafe { (*curr).description }),
         };
         interfs_descr.push(id);
-        curr = unsafe{(*curr).next};
+        curr = unsafe { (*curr).next };
     }
     interfs_descr
 }
