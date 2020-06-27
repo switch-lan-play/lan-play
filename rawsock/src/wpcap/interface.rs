@@ -96,19 +96,6 @@ impl<'a> traits::DynamicInterface<'a> for Interface<'a> {
             comment: unsafe { uninitialized() },
         };
 
-        let err = unsafe {
-            self.dll
-                .pcap_sendqueue_queue(self.queue, &header, packet.as_ptr())
-        };
-        if err != 0 {
-            self.flush();
-            let err = unsafe {
-                self.dll
-                    .pcap_sendqueue_queue(self.queue, &header, packet.as_ptr())
-            };
-            assert_eq!(err, 0);
-        }
-
         if unsafe {
             self.dll
                 .pcap_sendpacket(self.handle, packet.as_ptr(), packet.len() as c_int)
