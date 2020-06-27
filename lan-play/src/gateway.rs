@@ -1,5 +1,5 @@
-use crate::future_smoltcp::{OwnedUdp, TcpListener, UdpSocket};
-use crate::proxy::{other, BoxProxy, BoxUdp, Udp2};
+use crate::future_smoltcp::{OwnedUdp, TcpListener, TcpSocket, UdpSocket};
+use crate::proxy::{other, BoxProxy, BoxTcp, BoxUdp, Udp2};
 use drop_abort::{abortable, DropAbortHandle};
 use futures::future::select_all;
 use lru::LruCache;
@@ -26,7 +26,7 @@ impl Gateway {
             }),
         }
     }
-    pub async fn process(&self, mut _tcp: TcpListener, mut udp: UdpSocket) -> io::Result<()> {
+    pub async fn process(&self, mut tcp: TcpListener, mut udp: UdpSocket) -> io::Result<()> {
         let (udp_tx, mut udp_rx) = mpsc::channel(10);
         loop {
             tokio::select! {
@@ -41,6 +41,13 @@ impl Gateway {
                     if let Some(p) = p {
                         if let Err(e) = udp.send(p).await {
                             log::error!("udp.send {:?}", e);
+                        }
+                    }
+                }
+                result = tcp.accept() => {
+                    if let Ok(tcp) = result {
+                        if let Err(e) = self.on_tcp(tcp).await {
+                            log::error!("on_tcp {:?}", e);
                         }
                     }
                 }
@@ -59,6 +66,21 @@ impl Gateway {
         let connection = inner.udp_cache.get_mut(&src).unwrap();
         connection.send_to(&udp.data, udp.dst()).await?;
         Ok(())
+    }
+    pub async fn on_tcp(&self, tcp: TcpSocket) {
+        // TcpConnection::new(tcp, &self.proxy)
+    }
+}
+
+struct TcpConnection {
+    ptcp: BoxTcp,
+    stcp: TcpSocket,
+}
+
+impl TcpConnection {
+    fn new(tcp: TcpSocket, proxy: &BoxProxy) -> TcpConnection {
+        tokio::spawn();
+        todo!();
     }
 }
 

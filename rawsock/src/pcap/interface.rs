@@ -3,7 +3,7 @@ use super::dll::{PCapDll, PCapHandle, PCapPacketHeader};
 use super::structs::PCapStat;
 use crate::utils::cstr_to_string;
 use crate::{traits, BorrowedPacket, DataLink, Error, Stats};
-use libc::{c_int, c_ulong};
+use libc::c_int;
 use std::ffi::{CStr, CString};
 use std::mem::{transmute, uninitialized};
 use std::sync::Mutex;

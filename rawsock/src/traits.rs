@@ -6,7 +6,6 @@ use crate::{BorrowedPacket, DataLink, Error, InterfaceDescription, LibraryVersio
 use std::ffi::{CStr, CString};
 use std::iter::IntoIterator;
 use std::sync::Arc;
-use std::time::Duration;
 
 ///Trait for structures representing an opened interface (or network card or network device)
 ///

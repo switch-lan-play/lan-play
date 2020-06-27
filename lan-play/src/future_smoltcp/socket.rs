@@ -12,6 +12,7 @@ use std::{
     pin::Pin,
     sync::Arc,
     task::{Context, Poll},
+    mem::replace,
 };
 use tokio::io::{self, stream_reader, AsyncRead, AsyncWrite, StreamReader};
 use tokio::sync::mpsc;
@@ -33,6 +34,7 @@ pub struct TcpListener {
 pub struct TcpSocket {
     handle: SocketHandle,
     reactor: NetReactor,
+    source: Arc<Source>,
 }
 
 pub struct UdpSocket {
@@ -69,9 +71,18 @@ impl TcpListener {
             source,
         }
     }
-    pub async fn accept(&mut self) -> io::Result<()> {
+    pub async fn accept(&mut self) -> io::Result<TcpSocket> {
         loop {
-            self.source.readable(&self.reactor).await?;
+            {
+                let mut set = self.reactor.lock_set().await;
+                let socket = set.as_set_mut().get::<socket::TcpSocket>(self.handle);
+                if socket.can_send() {
+                    drop(socket);
+                    drop(set);
+                    return Ok(TcpSocket::new(self).await)
+                }
+            }
+            self.source.writable(&self.reactor).await?;
         }
     }
 }
@@ -137,10 +148,19 @@ impl SocketLeaf {
 }
 
 impl TcpSocket {
-    pub(super) fn new(handle: SocketHandle, reactor: NetReactor) -> (Self, SocketLeaf) {
-        let (tx, rx) = mpsc::channel(10);
-        let reader = stream_reader(rx.map(|x| Ok(x)).boxed());
-        (TcpSocket { handle, reactor }, SocketLeaf { tx })
+    async fn new(listener: &mut TcpListener) -> TcpSocket {
+        let mut reactor = listener.reactor.clone();
+        let mut set = reactor.lock_set().await;
+        let handle = set.new_tcp_socket();
+        drop(set);
+
+        let source = reactor.insert(handle);
+
+        TcpSocket {
+            handle: replace(&mut listener.handle, handle),
+            reactor,
+            source: replace(&mut listener.source, source),
+        }
     }
 }
 
