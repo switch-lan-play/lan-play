@@ -67,8 +67,8 @@ impl RawsockInterface {
         Receiver<Packet>,
     ) {
         let interface = self.interface;
-        let (packet_sender, stream) = channel::<Packet>(2);
-        let (sink, packet_receiver) = channel::<Packet>(2);
+        let (packet_sender, stream) = channel::<Packet>(50);
+        let (sink, packet_receiver) = channel::<Packet>(50);
 
         Self::start_thread(interface.clone(), packet_sender);
         let running = task::spawn(Self::run(interface, packet_receiver));

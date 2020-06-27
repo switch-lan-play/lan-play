@@ -50,8 +50,8 @@ impl SocketSet {
 
 fn new_tcp_socket() -> socket::TcpSocket<'static> {
     use smoltcp::socket::{TcpSocket, TcpSocketBuffer};
-    let rx_buffer = TcpSocketBuffer::new(vec![0; 2048]);
-    let tx_buffer = TcpSocketBuffer::new(vec![0; 2048]);
+    let rx_buffer = TcpSocketBuffer::new(vec![0; 65536]);
+    let tx_buffer = TcpSocketBuffer::new(vec![0; 65536]);
     let mut tcp = TcpSocket::new(rx_buffer, tx_buffer);
     tcp.set_accept_all(true);
     tcp.listen(0).unwrap();
@@ -62,8 +62,8 @@ fn new_tcp_socket() -> socket::TcpSocket<'static> {
 fn new_raw_socket() -> socket::RawSocket<'static, 'static> {
     use smoltcp::socket::{RawPacketMetadata, RawSocket, RawSocketBuffer};
     use smoltcp::wire::{IpProtocol, IpVersion};
-    let rx_buffer = RawSocketBuffer::new(vec![RawPacketMetadata::EMPTY; 4], vec![0; 2048]);
-    let tx_buffer = RawSocketBuffer::new(vec![RawPacketMetadata::EMPTY; 4], vec![0; 2048]);
+    let rx_buffer = RawSocketBuffer::new(vec![RawPacketMetadata::EMPTY; 4], vec![0; 8192]);
+    let tx_buffer = RawSocketBuffer::new(vec![RawPacketMetadata::EMPTY; 4], vec![0; 8192]);
     let raw = RawSocket::new(IpVersion::Ipv4, IpProtocol::Udp, rx_buffer, tx_buffer);
 
     raw
