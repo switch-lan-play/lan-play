@@ -6,7 +6,7 @@ use lru::LruCache;
 use std::io;
 use std::net::SocketAddr;
 use std::sync::Arc;
-use tokio::sync::{mpsc, Mutex};
+use tokio::{sync::{mpsc, Mutex}, io::{copy, split}};
 
 struct Inner {
     udp_cache: LruCache<SocketAddr, UdpConnection>,
@@ -67,8 +67,9 @@ impl Gateway {
         connection.send_to(&udp.data, udp.dst()).await?;
         Ok(())
     }
-    pub async fn on_tcp(&self, tcp: TcpSocket) {
-        // TcpConnection::new(tcp, &self.proxy)
+    pub async fn on_tcp(&self, tcp: TcpSocket) -> io::Result<()> {
+        TcpConnection::new(tcp, &self.proxy).await?;
+        Ok(())
     }
 }
 
@@ -78,9 +79,17 @@ struct TcpConnection {
 }
 
 impl TcpConnection {
-    fn new(tcp: TcpSocket, proxy: &BoxProxy) -> TcpConnection {
-        tokio::spawn();
-        todo!();
+    async fn new(stcp: TcpSocket, proxy: &BoxProxy) -> io::Result<()> {
+        let ptcp = proxy.new_tcp(stcp.local_addr()?).await?;
+        let (mut s_read, mut s_write) = split(stcp);
+        let (mut p_read, mut p_write) = split(ptcp);
+        tokio::spawn(async move {
+            copy(&mut s_read, &mut p_write).await
+        });
+        tokio::spawn(async move {
+            copy(&mut p_read, &mut s_write).await
+        });
+        Ok(())
     }
 }
 

@@ -1,5 +1,5 @@
 use super::{
-    raw_udp::{parse_udp_owned, ChecksumCapabilities, OwnedUdp},
+    raw_udp::{parse_udp_owned, endpoint2socketaddr, ChecksumCapabilities, OwnedUdp},
     reactor::Source,
     NetReactor, OutPacket,
 };
@@ -13,6 +13,8 @@ use std::{
     sync::Arc,
     task::{Context, Poll},
     mem::replace,
+    future::Future,
+    net::{SocketAddr, SocketAddrV4},
 };
 use tokio::io::{self, stream_reader, AsyncRead, AsyncWrite, StreamReader};
 use tokio::sync::mpsc;
@@ -35,16 +37,14 @@ pub struct TcpSocket {
     handle: SocketHandle,
     reactor: NetReactor,
     source: Arc<Source>,
+    local_addr: SocketAddr,
+    peer_addr: SocketAddr,
 }
 
 pub struct UdpSocket {
     handle: SocketHandle,
     reactor: NetReactor,
     source: Arc<Source>,
-}
-
-pub struct SocketLeaf {
-    tx: mpsc::Sender<Packet>,
 }
 
 impl Drop for TcpListener {
@@ -125,10 +125,8 @@ impl UdpSocket {
                     .as_set_mut()
                     .get::<smoltcp::socket::RawSocket>(self.handle);
                 if socket.can_send() {
-                    match socket.send_slice(&data.to_raw()) {
-                        Err(Error::Exhausted) => {}
-                        res => return res.map_err(map_err),
-                    }
+                    return socket.send_slice(&data.to_raw())
+                        .map_err(map_err)
                 }
             }
             self.source.writable(&self.reactor).await?;
@@ -136,30 +134,60 @@ impl UdpSocket {
     }
 }
 
-impl SocketLeaf {
-    pub async fn send<P: Into<Packet>>(&mut self, packet: P) {
-        self.tx.send(packet.into()).await.unwrap()
-    }
-    pub fn try_send<P: Into<Packet>>(&mut self, packet: P) {
-        self.tx
-            .try_send(packet.into())
-            .expect("FIXME try send failed");
-    }
-}
-
 impl TcpSocket {
     async fn new(listener: &mut TcpListener) -> TcpSocket {
         let mut reactor = listener.reactor.clone();
         let mut set = reactor.lock_set().await;
+        let socket = set.as_set_mut().get::<socket::TcpSocket>(listener.handle);
+        let local_addr = endpoint2socketaddr(&socket.local_endpoint());
+        let peer_addr = endpoint2socketaddr(&socket.remote_endpoint());
+        drop(socket);
         let handle = set.new_tcp_socket();
         drop(set);
 
         let source = reactor.insert(handle);
 
         TcpSocket {
-            handle: replace(&mut listener.handle, handle),
             reactor,
+            handle: replace(&mut listener.handle, handle),
             source: replace(&mut listener.source, source),
+            local_addr,
+            peer_addr,
+        }
+    }
+    pub fn local_addr(&self) -> io::Result<SocketAddr> {
+        Ok(self.local_addr)
+    }
+    pub fn peer_addr(&self) -> io::Result<SocketAddr> {
+        Ok(self.peer_addr)
+    }
+    pub async fn recv(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        loop {
+            {
+                let mut set = self.reactor.lock_set().await;
+                let mut socket = set.as_set_mut().get::<socket::TcpSocket>(self.handle);
+                if socket.can_recv() {
+                    return socket
+                        .recv_slice(buf)
+                        .map_err(map_err);
+                }
+            }
+            self.source.readable(&self.reactor).await?;
+        }
+    }
+    pub async fn send(&mut self, data: &[u8]) -> io::Result<usize> {
+        loop {
+            {
+                let mut set = self.reactor.lock_set().await;
+                let mut socket = set
+                    .as_set_mut()
+                    .get::<smoltcp::socket::TcpSocket>(self.handle);
+                if socket.can_send() {
+                    return socket.send_slice(data)
+                        .map_err(map_err);
+                }
+            }
+            self.source.writable(&self.reactor).await?;
         }
     }
 }
@@ -192,8 +220,9 @@ impl AsyncRead for TcpSocket {
         cx: &mut Context<'_>,
         buf: &mut [u8],
     ) -> Poll<io::Result<usize>> {
-        // Pin::new(&mut self.reader).poll_read(cx, buf)
-        todo!();
+        let fut = self.recv(buf);
+        futures::pin_mut!(fut);
+        fut.poll(cx)
     }
 }
 
@@ -203,7 +232,9 @@ impl AsyncWrite for TcpSocket {
         cx: &mut Context<'_>,
         buf: &[u8],
     ) -> Poll<Result<usize, io::Error>> {
-        todo!();
+        let fut = self.send(buf);
+        futures::pin_mut!(fut);
+        fut.poll(cx)
     }
     fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
         Poll::Ready(Ok(()))

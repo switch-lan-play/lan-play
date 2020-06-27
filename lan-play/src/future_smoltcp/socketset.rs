@@ -1,6 +1,6 @@
 use super::raw_udp::parse_udp;
 use super::{
-    socket::{Socket, SocketLeaf, TcpSocket, UdpSocket},
+    socket::{Socket, TcpSocket, UdpSocket},
     NetEvent, NetReactor, OutPacket,
 };
 use smoltcp::{
@@ -15,7 +15,6 @@ pub struct SocketSet {
     raw_socket: SocketHandle,
     event_sender: mpsc::Sender<NetEvent>,
     packet_sender: mpsc::Sender<OutPacket>,
-    leaf_map: HashMap<SocketHandle, SocketLeaf>,
 }
 
 impl SocketSet {
@@ -30,7 +29,6 @@ impl SocketSet {
             raw_socket,
             event_sender,
             packet_sender,
-            leaf_map: HashMap::new(),
         }
     }
     pub fn as_set_mut(&mut self) -> &mut InnerSocketSet<'static, 'static, 'static> {
@@ -47,34 +45,6 @@ impl SocketSet {
     pub fn new_raw_socket(&mut self) -> SocketHandle {
         let handle = self.set.add(new_raw_socket());
         handle
-    }
-    pub fn process(&mut self) {
-        {
-            let mut raw = self.set.get::<socket::RawSocket>(self.raw_socket);
-            if raw.can_recv() {
-                let data = raw.recv().unwrap();
-                let udp = parse_udp(data, &ChecksumCapabilities::default());
-                println!("udp {:?}", udp);
-            }
-        }
-        for mut s in self.set.iter_mut().filter_map(socket::TcpSocket::downcast) {
-            if s.may_recv() {
-                println!("may_recv {:?}", s.handle());
-                let data = s
-                    .recv(|buffer| {
-                        let data = buffer.to_owned();
-                        (data.len(), data)
-                    })
-                    .unwrap();
-                println!("data {:?}", data);
-                if let Some(leaf) = self.leaf_map.get_mut(&s.handle()) {
-                    leaf.try_send(data);
-                } else {
-                    println!("no leaf");
-                }
-            }
-            // println!("tcp {:?} recv {} send {}", s.state(), s.may_recv(), s.may_send());
-        }
     }
 }
 
