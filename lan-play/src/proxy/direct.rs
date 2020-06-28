@@ -1,7 +1,6 @@
 use super::{socket, BoxProxy, BoxTcp, BoxUdp, Proxy, SocketAddr};
 use tokio::io;
 use tokio::net::{TcpStream, UdpSocket};
-use tokio::task::{self, JoinHandle};
 
 #[async_trait]
 impl socket::Tcp for TcpStream {}

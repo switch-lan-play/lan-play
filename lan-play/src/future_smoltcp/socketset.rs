@@ -1,42 +1,23 @@
-use super::raw_udp::parse_udp;
-use super::{
-    socket::{Socket, TcpSocket, UdpSocket},
-    NetEvent, NetReactor, OutPacket,
-};
 use smoltcp::{
-    phy::ChecksumCapabilities,
-    socket::{self, AnySocket, SocketHandle, SocketSet as InnerSocketSet},
+    socket::{self, SocketHandle, SocketSet as InnerSocketSet},
 };
-use std::collections::HashMap;
-use tokio::sync::mpsc;
 
 pub struct SocketSet {
     set: InnerSocketSet<'static, 'static, 'static>,
     raw_socket: SocketHandle,
-    event_sender: mpsc::Sender<NetEvent>,
-    packet_sender: mpsc::Sender<OutPacket>,
 }
 
 impl SocketSet {
-    pub fn new(
-        event_sender: mpsc::Sender<NetEvent>,
-        packet_sender: mpsc::Sender<OutPacket>,
-    ) -> SocketSet {
+    pub fn new() -> SocketSet {
         let mut nset = InnerSocketSet::new(vec![]);
         let raw_socket = nset.add(new_raw_socket());
         SocketSet {
             set: nset,
             raw_socket,
-            event_sender,
-            packet_sender,
         }
     }
     pub fn as_set_mut(&mut self) -> &mut InnerSocketSet<'static, 'static, 'static> {
         &mut self.set
-    }
-    pub fn send(&mut self, handle: SocketHandle, data: Vec<u8>) {
-        todo!("socketset.send");
-        let socket = self.set.get::<socket::TcpSocket>(handle);
     }
     pub fn new_tcp_socket(&mut self) -> SocketHandle {
         let handle = self.set.add(new_tcp_socket());

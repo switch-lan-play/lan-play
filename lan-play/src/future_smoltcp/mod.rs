@@ -27,14 +27,7 @@ type Packet = Vec<u8>;
 pub type OutPacket = (SocketHandle, Packet);
 pub type Ethernet = SmoltcpEthernetInterface<'static, 'static, 'static, FutureDevice>;
 
-#[derive(Debug)]
-pub enum NetEvent {
-    Tcp(TcpSocket),
-    Udp(OwnedUdp),
-}
-
 pub struct Net {
-    event_stream: mpsc::Receiver<NetEvent>,
     reactor: NetReactor,
 }
 
@@ -45,9 +38,6 @@ impl Net {
         gateway_ip: Ipv4Address,
         interf: RawsockInterface,
     ) -> Net {
-        let (event_tx, event_rx) = mpsc::channel(1);
-        let (packet_sender, packet_receiver) = mpsc::channel(1);
-
         let (_running, tx, rx) = interf.start();
         let device = FutureDevice::new(tx, rx);
         let neighbor_cache = NeighborCache::new(BTreeMap::new());
@@ -62,19 +52,17 @@ impl Net {
             .routes(routes)
             .finalize();
 
-        let socket_set = Arc::new(Mutex::new(SocketSet::new(event_tx, packet_sender)));
+        let socket_set = Arc::new(Mutex::new(SocketSet::new()));
         let reactor = NetReactor::new(socket_set);
         let r = reactor.clone();
         tokio::spawn(async move {
             r.run(ReactorRunner {
                 ethernet,
-                packet_receiver,
             })
             .await
         });
 
         Net {
-            event_stream: event_rx,
             reactor,
         }
     }
@@ -83,9 +71,6 @@ impl Net {
     }
     pub async fn udp_socket(&self) -> UdpSocket {
         UdpSocket::new(self.reactor.clone()).await
-    }
-    pub async fn next_event(&mut self) -> Option<NetEvent> {
-        self.event_stream.recv().await
     }
 }
 

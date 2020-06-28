@@ -1,11 +1,10 @@
 use crate::error::{Error, Result};
-use crate::future_smoltcp::{Net, NetEvent, Socket};
+use crate::future_smoltcp::Net;
 use crate::gateway::Gateway;
-use crate::proxy::{BoxProxy, BoxUdp, Proxy};
+use crate::proxy::BoxProxy;
 use crate::rawsock_socket::{ErrorWithDesc, RawsockInterface, RawsockInterfaceSet};
 use futures::future::join_all;
 use smoltcp::wire::{IpEndpoint, Ipv4Address, Ipv4Cidr};
-use tokio::task;
 
 pub struct LanPlay {
     gateway: Gateway,

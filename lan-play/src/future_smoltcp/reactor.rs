@@ -21,7 +21,6 @@ pub(super) struct Source {
 
 pub struct ReactorRunner {
     pub ethernet: Ethernet,
-    pub packet_receiver: mpsc::Receiver<OutPacket>,
 }
 
 #[derive(Clone)]
@@ -99,7 +98,6 @@ impl NetReactor {
         let sockets = self.socket_set.clone();
         let ReactorRunner {
             mut ethernet,
-            mut packet_receiver,
         } = args;
 
         loop {
@@ -114,13 +112,6 @@ impl NetReactor {
             select! {
                 _ = delay_for(deadline.into()).fuse() => {},
                 _ = device.receiver.peek().fuse() => {},
-                item = packet_receiver.recv().fuse() => {
-                    if let Some((handle, packet)) = item {
-                        sockets.lock().unwrap().send(handle, packet);
-                    } else {
-                        break
-                    }
-                },
             }
             let end = Instant::now();
             let mut set = sockets.lock().unwrap();
@@ -162,7 +153,6 @@ impl NetReactor {
             for waker in ready {
                 waker.wake();
             }
-            // set.process();
         }
     }
 }

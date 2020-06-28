@@ -16,7 +16,7 @@ use std::{
     future::Future,
     net::{SocketAddr, SocketAddrV4},
 };
-use tokio::io::{self, stream_reader, AsyncRead, AsyncWrite, StreamReader};
+use tokio::io::{self, AsyncRead, AsyncWrite};
 use tokio::sync::mpsc;
 
 pub type Packet = Bytes;

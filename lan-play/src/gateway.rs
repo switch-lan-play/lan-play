@@ -1,7 +1,6 @@
 use crate::future_smoltcp::{OwnedUdp, TcpListener, TcpSocket, UdpSocket};
-use crate::proxy::{other, BoxProxy, BoxTcp, BoxUdp, Udp2};
+use crate::proxy::{other, BoxProxy, BoxTcp, Udp2};
 use drop_abort::{abortable, DropAbortHandle};
-use futures::future::select_all;
 use lru::LruCache;
 use std::io;
 use std::net::SocketAddr;
