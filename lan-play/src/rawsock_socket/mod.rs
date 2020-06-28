@@ -1,4 +1,3 @@
-mod device;
 mod error;
 mod interface;
 

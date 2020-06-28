@@ -17,14 +17,13 @@ use smoltcp::{
     time::Instant,
     wire::{EthernetAddress, IpCidr, Ipv4Address},
 };
-pub use socket::{Socket, SocketHandle, TcpListener, TcpSocket, UdpSocket};
+pub use socket::{SocketHandle, TcpListener, TcpSocket, UdpSocket};
 use socketset::SocketSet;
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
 use tokio::sync::mpsc::{self, error::TryRecvError};
 
 type Packet = Vec<u8>;
-pub type OutPacket = (SocketHandle, Packet);
 pub type Ethernet = SmoltcpEthernetInterface<'static, 'static, 'static, FutureDevice>;
 
 pub struct Net {

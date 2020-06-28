@@ -1,4 +1,3 @@
-use super::device::Packet;
 use super::{Error, ErrorWithDesc};
 use crate::interface_info::{get_interface_info, InterfaceInfo};
 use rawsock::traits::{DynamicInterface, Library};
@@ -10,6 +9,7 @@ use std::thread;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
 use tokio::task;
 
+type Packet = Vec<u8>;
 type Interface = std::sync::Arc<dyn DynamicInterface<'static> + 'static>;
 pub struct RawsockInterface {
     pub desc: InterfaceDescription,

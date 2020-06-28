@@ -1,5 +1,5 @@
 use crate::future_smoltcp::{OwnedUdp, TcpListener, TcpSocket, UdpSocket};
-use crate::proxy::{other, BoxProxy, BoxTcp, Udp2};
+use crate::proxy::{other, BoxProxy, Udp2};
 use drop_abort::{abortable, DropAbortHandle};
 use lru::LruCache;
 use std::io;
@@ -52,7 +52,6 @@ impl Gateway {
                 }
             };
         }
-        Ok(())
     }
     pub async fn on_udp(&self, udp: OwnedUdp, sender: mpsc::Sender<OwnedUdp>) -> io::Result<()> {
         let mut inner = self.inner.lock().await;
@@ -73,8 +72,6 @@ impl Gateway {
 }
 
 struct TcpConnection {
-    ptcp: BoxTcp,
-    stcp: TcpSocket,
 }
 
 impl TcpConnection {

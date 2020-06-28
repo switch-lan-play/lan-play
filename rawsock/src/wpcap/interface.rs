@@ -88,14 +88,6 @@ impl<'a> Drop for Interface<'a> {
 
 impl<'a> traits::DynamicInterface<'a> for Interface<'a> {
     fn send(&self, packet: &[u8]) -> Result<(), Error> {
-        let header = PCapPacketHeader {
-            len: packet.len() as c_uint,
-            caplen: packet.len() as c_uint,
-            ts: unsafe { uninitialized() },
-            #[cfg(any(target_os = "macos", target_os = "ios"))]
-            comment: unsafe { uninitialized() },
-        };
-
         if unsafe {
             self.dll
                 .pcap_sendpacket(self.handle, packet.as_ptr(), packet.len() as c_int)

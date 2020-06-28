@@ -3,9 +3,6 @@ use super::{
     reactor::Source,
     NetReactor,
 };
-use bytes::Bytes;
-use futures::future::{FutureExt};
-use futures::stream::{StreamExt};
 pub use smoltcp::socket::{self, SocketHandle, SocketRef};
 
 use std::{
@@ -17,15 +14,6 @@ use std::{
     net::{SocketAddr},
 };
 use tokio::io::{self, AsyncRead, AsyncWrite};
-
-
-pub type Packet = Bytes;
-
-#[derive(Debug)]
-pub enum Socket {
-    Tcp(TcpSocket),
-    Udp(UdpSocket),
-}
 
 pub struct TcpListener {
     handle: SocketHandle,
@@ -189,12 +177,6 @@ impl TcpSocket {
             }
             self.source.writable(&self.reactor).await?;
         }
-    }
-}
-
-impl Into<Socket> for TcpSocket {
-    fn into(self) -> Socket {
-        Socket::Tcp(self)
     }
 }
 

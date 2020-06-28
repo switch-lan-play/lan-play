@@ -4,16 +4,12 @@ use smoltcp::{
 
 pub struct SocketSet {
     set: InnerSocketSet<'static, 'static, 'static>,
-    raw_socket: SocketHandle,
 }
 
 impl SocketSet {
     pub fn new() -> SocketSet {
-        let mut nset = InnerSocketSet::new(vec![]);
-        let raw_socket = nset.add(new_raw_socket());
         SocketSet {
-            set: nset,
-            raw_socket,
+            set: InnerSocketSet::new(vec![]),
         }
     }
     pub fn as_set_mut(&mut self) -> &mut InnerSocketSet<'static, 'static, 'static> {

@@ -82,15 +82,6 @@ pub trait Proxy {
     async fn new_udp(&self, addr: SocketAddr) -> io::Result<BoxUdp>;
 }
 
-pub fn spawn_udp(mut udp: BoxUdp) {
-    tokio::spawn(async move {
-        let mut buf = vec![0u8; 1000];
-        let (_size, addr) = udp.recv_from(&mut buf).await?;
-        udp.send_to(&buf, addr).await?;
-        Ok::<_, io::Error>(())
-    });
-}
-
 #[cfg(test)]
 mod test {
     use super::socks5::test::socks5_server;

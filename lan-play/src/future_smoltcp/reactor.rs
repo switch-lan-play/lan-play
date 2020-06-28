@@ -1,4 +1,4 @@
-use super::{Ethernet, OutPacket, Socket, SocketHandle, SocketSet, TcpListener};
+use super::{Ethernet, SocketHandle, SocketSet};
 use futures::prelude::*;
 use futures::select;
 use smoltcp::time::{Duration, Instant};
