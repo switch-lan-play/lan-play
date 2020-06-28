@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use std::io;
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::task::{Poll, Waker};
-use tokio::sync::mpsc::{self, error::TryRecvError};
+
 use tokio::time::delay_for;
 
 #[derive(Debug)]
@@ -30,7 +30,7 @@ pub(super) struct NetReactor {
 }
 
 impl Source {
-    pub async fn readable(&self, reactor: &NetReactor) -> io::Result<()> {
+    pub async fn readable(&self, _reactor: &NetReactor) -> io::Result<()> {
         let mut polled = false;
 
         future::poll_fn(|cx| {
@@ -49,7 +49,7 @@ impl Source {
         })
         .await
     }
-    pub async fn writable(&self, reactor: &NetReactor) -> io::Result<()> {
+    pub async fn writable(&self, _reactor: &NetReactor) -> io::Result<()> {
         let mut polled = false;
 
         future::poll_fn(|cx| {

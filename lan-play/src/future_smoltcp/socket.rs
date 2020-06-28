@@ -1,23 +1,23 @@
 use super::{
     raw_udp::{parse_udp_owned, endpoint2socketaddr, ChecksumCapabilities, OwnedUdp},
     reactor::Source,
-    NetReactor, OutPacket,
+    NetReactor,
 };
 use bytes::Bytes;
-use futures::future::{BoxFuture, FutureExt};
-use futures::stream::{BoxStream, StreamExt};
+use futures::future::{FutureExt};
+use futures::stream::{StreamExt};
 pub use smoltcp::socket::{self, SocketHandle, SocketRef};
-use smoltcp::Error;
+
 use std::{
     pin::Pin,
     sync::Arc,
     task::{Context, Poll},
     mem::replace,
     future::Future,
-    net::{SocketAddr, SocketAddrV4},
+    net::{SocketAddr},
 };
 use tokio::io::{self, AsyncRead, AsyncWrite};
-use tokio::sync::mpsc;
+
 
 pub type Packet = Bytes;
 
@@ -136,7 +136,7 @@ impl UdpSocket {
 
 impl TcpSocket {
     async fn new(listener: &mut TcpListener) -> TcpSocket {
-        let mut reactor = listener.reactor.clone();
+        let reactor = listener.reactor.clone();
         let mut set = reactor.lock_set().await;
         let socket = set.as_set_mut().get::<socket::TcpSocket>(listener.handle);
         let local_addr = endpoint2socketaddr(&socket.local_endpoint());

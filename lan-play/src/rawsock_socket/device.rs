@@ -1,7 +1,7 @@
 use futures::executor::block_on;
 use futures::sink::{Sink, SinkExt};
 use futures::stream::Stream;
-use smoltcp::phy::{Device, DeviceCapabilities, RxToken, TxToken};
+use smoltcp::phy::{DeviceCapabilities, RxToken, TxToken};
 use smoltcp::{
     iface::{EthernetInterface, EthernetInterfaceBuilder, NeighborCache},
     socket::SocketSet,

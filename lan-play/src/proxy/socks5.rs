@@ -2,7 +2,7 @@ use super::{other, socket, BoxProxy, BoxTcp, BoxUdp, Proxy, SocketAddr};
 use async_socks5::{connect, AddrKind, Auth, SocksDatagram};
 use tokio::io;
 use tokio::net::{TcpStream, UdpSocket};
-use tokio::task::{self, JoinHandle};
+
 
 #[async_trait]
 impl socket::Udp for SocksDatagram<TcpStream> {

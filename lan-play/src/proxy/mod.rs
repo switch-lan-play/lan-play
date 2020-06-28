@@ -85,7 +85,7 @@ pub trait Proxy {
 pub fn spawn_udp(mut udp: BoxUdp) {
     tokio::spawn(async move {
         let mut buf = vec![0u8; 1000];
-        let (size, addr) = udp.recv_from(&mut buf).await?;
+        let (_size, addr) = udp.recv_from(&mut buf).await?;
         udp.send_to(&buf, addr).await?;
         Ok::<_, io::Error>(())
     });

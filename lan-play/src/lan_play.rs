@@ -4,7 +4,7 @@ use crate::gateway::Gateway;
 use crate::proxy::BoxProxy;
 use crate::rawsock_socket::{ErrorWithDesc, RawsockInterface, RawsockInterfaceSet};
 use futures::future::join_all;
-use smoltcp::wire::{IpEndpoint, Ipv4Address, Ipv4Cidr};
+use smoltcp::wire::{Ipv4Address, Ipv4Cidr};
 
 pub struct LanPlay {
     gateway: Gateway,

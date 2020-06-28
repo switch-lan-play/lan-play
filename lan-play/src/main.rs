@@ -20,7 +20,7 @@ use rawsock::traits::Library;
 use rawsock_socket::RawsockInterfaceSet;
 use smoltcp::wire::Ipv4Cidr;
 use std::net::Ipv4Addr;
-use std::sync::Arc;
+
 use structopt::StructOpt;
 
 /// Lan play
