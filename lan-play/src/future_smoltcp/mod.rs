@@ -116,8 +116,8 @@ impl TxToken for FutureTxToken {
         let result = f(&mut buffer);
         if result.is_ok() {
             let mut s = self.0;
-            if s.try_send(buffer).is_err() {
-                // log::warn!("send error");
+            if let Err(e) = s.try_send(buffer) {
+                log::warn!("send error {:?}", e);
             }
         }
         result

@@ -15,7 +15,7 @@ mod rawsock_socket;
 
 use error::Result;
 use lan_play::LanPlay;
-use proxy::DirectProxy;
+use proxy::{DirectProxy, Socks5Proxy};
 use rawsock::traits::Library;
 use rawsock_socket::RawsockInterfaceSet;
 use smoltcp::wire::Ipv4Cidr;
@@ -64,7 +64,9 @@ async fn main() -> Result<()> {
     let set = RawsockInterfaceSet::new(&RAWSOCK_LIB, ipv4cidr)
         .expect("Could not open any packet capturing library");
 
-    let mut lp = LanPlay::new(DirectProxy::new(), ipv4cidr, gateway_ip);
+    let _direct = DirectProxy::new();
+    let _socks5 = Socks5Proxy::new("127.0.0.1:10800".parse().unwrap(), None);
+    let mut lp = LanPlay::new(_direct, ipv4cidr, gateway_ip);
 
     lp.start(&set, opt.netif).await?;
 
