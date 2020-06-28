@@ -39,8 +39,8 @@ fn new_tcp_socket() -> socket::TcpSocket<'static> {
 fn new_raw_socket() -> socket::RawSocket<'static, 'static> {
     use smoltcp::socket::{RawPacketMetadata, RawSocket, RawSocketBuffer};
     use smoltcp::wire::{IpProtocol, IpVersion};
-    let rx_buffer = RawSocketBuffer::new(vec![RawPacketMetadata::EMPTY; 4], vec![0; 8192]);
-    let tx_buffer = RawSocketBuffer::new(vec![RawPacketMetadata::EMPTY; 4], vec![0; 8192]);
+    let rx_buffer = RawSocketBuffer::new(vec![RawPacketMetadata::EMPTY; 32], vec![0; 8192]);
+    let tx_buffer = RawSocketBuffer::new(vec![RawPacketMetadata::EMPTY; 32], vec![0; 8192]);
     let raw = RawSocket::new(IpVersion::Ipv4, IpProtocol::Udp, rx_buffer, tx_buffer);
 
     raw

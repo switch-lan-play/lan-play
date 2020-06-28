@@ -117,6 +117,7 @@ impl NetReactor {
             let mut set = sockets.lock().unwrap();
             let readiness = match ethernet.poll(set.as_set_mut(), end) {
                 Ok(b) => b,
+                Err(smoltcp::Error::Dropped) => false,
                 Err(e) => {
                     log::error!("poll error {:?}", e);
                     true
