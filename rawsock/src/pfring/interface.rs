@@ -6,8 +6,7 @@ use crate::{traits, BorrowedPacket, DataLink, Stats};
 use dlopen::wrapper::Container;
 use libc::{c_int, c_uchar, c_uint};
 use std::ffi::{CStr, CString};
-use std::mem::transmute;
-use std::mem::uninitialized;
+use std::mem::{MaybeUninit, transmute};
 
 ///pfring version of an interface.
 pub struct Interface<'a> {
@@ -60,16 +59,18 @@ impl<'a> traits::DynamicInterface<'a> for Interface<'a> {
     }
 
     fn receive(&mut self) -> Result<BorrowedPacket, Error> {
-        let mut buf: *mut u8 = unsafe { uninitialized() };
-        let mut header: PFRingPacketHeader = unsafe { uninitialized() };
+        let mut buf = MaybeUninit::<*mut u8>::uninit();
+        let mut header = MaybeUninit::<PFRingPacketHeader>::uninit();
         let result = unsafe {
             self.dll
-                .pfring_recv(self.handle, &mut buf, 0, &mut header, 1)
+                .pfring_recv(self.handle, buf.as_mut_ptr(), 0, header.as_mut_ptr(), 1)
         };
         if result != 1 {
             Err(Error::ReceivingPacket(string_from_pfring_err_code(result)))
         } else {
-            Ok(borrowed_packet_from_header(&header, buf))
+            unsafe {
+                Ok(borrowed_packet_from_header(&header.assume_init(), buf.assume_init()))
+            }
         }
     }
 
@@ -83,9 +84,10 @@ impl<'a> traits::DynamicInterface<'a> for Interface<'a> {
     }
 
     fn stats(&self) -> Result<Stats, Error> {
-        let mut stats: PFRingStat = unsafe { uninitialized() };
-        let result = unsafe { self.dll.pfring_stats(self.handle, &mut stats) };
+        let mut stats = MaybeUninit::<PFRingStat>::uninit();
+        let result = unsafe { self.dll.pfring_stats(self.handle, stats.as_mut_ptr()) };
         if result == SUCCESS {
+            let stats = unsafe { stats.assume_init() };
             Ok(Stats {
                 received: stats.recv as u64,
                 dropped: stats.drop as u64,

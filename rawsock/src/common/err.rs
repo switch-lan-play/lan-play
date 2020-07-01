@@ -24,21 +24,6 @@ pub enum Error {
     LibraryError(String),
 }
 
-impl ErrorTrait for Error {
-    fn description(&self) -> &str {
-        match *self {
-            Error::DllError(ref err) => err.description(),
-            Error::NullCharacter(ref err) => err.description(),
-            Error::OpeningInterface(ref txt) => txt,
-            Error::ReceivingPacket(ref txt) => txt,
-            Error::SendingPacket(ref txt) => txt,
-            Error::GettingDeviceDescriptionList(ref txt) => txt,
-            Error::NoPathsProvided => "No library paths were provided.",
-            Error::LibraryError(ref txt) => txt,
-        }
-    }
-}
-
 impl Display for Error {
     fn fmt(&self, f: &mut Formatter) -> FmtResult {
         match *self {
@@ -52,6 +37,9 @@ impl Display for Error {
             Error::LibraryError(ref txt) => f.write_str(txt),
         }
     }
+}
+
+impl ErrorTrait for Error {
 }
 
 impl From<::dlopen::Error> for Error {

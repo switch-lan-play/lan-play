@@ -3,7 +3,7 @@ use crate::common::InterfaceDescription;
 use crate::utils::cstr_to_string;
 use libc::{c_char, c_uchar, c_uint, c_ushort, c_void, timeval};
 use std::ffi::CStr;
-use std::mem::uninitialized;
+use std::mem::zeroed;
 
 ///Raw PCap handle - created only to allow construction of pointers.
 pub enum PCapHandle {}
@@ -33,7 +33,7 @@ impl PCapErrBuf {
     ///Creates a new instance.
     pub fn new() -> PCapErrBuf {
         PCapErrBuf {
-            buffer: unsafe { uninitialized() },
+            buffer: unsafe { zeroed() },
         }
     }
 }
