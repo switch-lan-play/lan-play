@@ -1,11 +1,10 @@
 use super::{other, socket, BoxProxy, BoxTcp, BoxUdp, Proxy, SocketAddr, Auth};
 use async_socks5::{connect, AddrKind, SocksDatagram};
-use tokio::io;
+use tokio::io::{self, BufWriter};
 use tokio::net::{TcpStream, UdpSocket};
 
-
 #[async_trait]
-impl socket::Udp for SocksDatagram<TcpStream> {
+impl socket::Udp for SocksDatagram<BufWriter<TcpStream>> {
     async fn send_to(&mut self, buf: &[u8], addr: SocketAddr) -> io::Result<usize> {
         SocksDatagram::send_to(self, buf, addr).await.map_err(other)
     }
@@ -47,7 +46,7 @@ impl Proxy for Socks5Proxy {
         Ok(Box::new(socket))
     }
     async fn new_udp(&self, addr: SocketAddr) -> io::Result<BoxUdp> {
-        let proxy_stream = TcpStream::connect(&self.server).await?;
+        let proxy_stream = BufWriter::new(TcpStream::connect(&self.server).await?);
         let socket = UdpSocket::bind(addr).await?;
         let udp =
             SocksDatagram::associate(proxy_stream, socket, self.auth.clone(), None::<SocketAddr>)
