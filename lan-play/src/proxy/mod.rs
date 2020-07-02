@@ -5,18 +5,18 @@ pub use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 
 mod direct;
 mod socks5;
-pub use socket::{other, BoxTcp, BoxUdp, Udp2};
+pub use socket::{other, BoxTcp, BoxUdp, SendHalf, RecvHalf};
 pub type BoxProxy = Box<dyn Proxy + Unpin + Sync + Send>;
 lazy_static! {
     pub static ref ANY_ADDR: SocketAddr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 0);
 }
 
 pub mod socket {
-    use std::{net::SocketAddr, sync::Arc};
+    use std::{net::SocketAddr, sync::{Arc, Mutex as SyncMutex}};
     use tokio::{
         io::{self, AsyncRead, AsyncWrite},
-        sync::{Mutex, Notify},
     };
+    use futures::{future::{poll_fn, Future}, pin_mut};
 
     pub type BoxTcp = Box<dyn Tcp + Unpin + Send>;
     pub type BoxUdp = Box<dyn Udp + Unpin + Send>;
@@ -29,49 +29,46 @@ pub mod socket {
         async fn recv_from(&mut self, buf: &mut [u8]) -> io::Result<(usize, SocketAddr)>;
     }
 
-    pub struct Udp2(Arc<(Mutex<BoxUdp>, Notify, Notify)>);
+    pub struct SendHalf {
+        inner: Arc<SyncMutex<BoxUdp>>,
+    }
+    pub struct RecvHalf {
+        inner: Arc<SyncMutex<BoxUdp>>,
+    }
 
-    impl From<BoxUdp> for Udp2 {
-        fn from(u: BoxUdp) -> Self {
-            Udp2::new(u)
+    impl dyn Udp + Unpin + Send {
+        pub fn split(self: Box<Self>) -> (SendHalf, RecvHalf) {
+            let inner = Arc::new(SyncMutex::new(self));
+            (SendHalf {
+                inner: inner.clone(),
+            }, RecvHalf {
+                inner,
+            })
         }
     }
 
-    impl Udp2 {
-        fn new(u: BoxUdp) -> Self {
-            let inner = Arc::new((Mutex::new(u), Notify::new(), Notify::new()));
-            Udp2(inner)
-        }
-        pub async fn send_to(&self, buf: &[u8], addr: SocketAddr) -> io::Result<usize> {
-            let inner = &self.0;
-            let udp = &inner.0;
-            let notify1 = &inner.1;
-            let notify2 = &inner.2;
-            notify1.notify();
-            let r = udp.lock().await.send_to(buf, addr).await;
-            notify2.notify();
-            r
-        }
-        pub async fn recv_from(&self, buf: &mut [u8]) -> io::Result<(usize, SocketAddr)> {
-            let inner = &self.0;
-            let udp = &inner.0;
-            let notify1 = &inner.1;
-            let notify2 = &inner.2;
-
-            loop {
-                let mut lock = udp.lock().await;
-                tokio::select! {
-                    r = lock.recv_from(buf) => {
-                        return r
-                    }
-                    _ = notify1.notified() => {
-                        drop(lock);
-                        notify2.notified().await;
-                    }
-                };
-            }
+    impl SendHalf {
+        pub async fn send_to(&mut self, buf: &[u8], addr: SocketAddr) -> io::Result<usize> {
+            poll_fn(|cx| {
+                let mut inner = self.inner.lock().unwrap();
+                let fut = inner.send_to(buf, addr);
+                pin_mut!(fut);
+                fut.poll(cx)
+            }).await
         }
     }
+
+    impl RecvHalf {
+        pub async fn recv_from(&mut self, buf: &mut [u8]) -> io::Result<(usize, SocketAddr)> {
+            poll_fn(|cx| {
+                let mut inner = self.inner.lock().unwrap();
+                let fut = inner.recv_from(buf);
+                pin_mut!(fut);
+                fut.poll(cx)
+            }).await
+        }
+    }
+
     pub fn other<E: Into<Box<dyn std::error::Error + Send + Sync>>>(e: E) -> io::Error {
         io::Error::new(io::ErrorKind::Other, e)
     }

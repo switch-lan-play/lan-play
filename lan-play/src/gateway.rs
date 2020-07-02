@@ -1,5 +1,5 @@
 use crate::future_smoltcp::{OwnedUdp, TcpListener, TcpSocket, UdpSocket};
-use crate::proxy::{other, BoxProxy, Udp2};
+use crate::proxy::{other, BoxProxy, SendHalf, RecvHalf};
 use drop_abort::{abortable, DropAbortHandle};
 use lru::LruCache;
 use std::io;
@@ -90,19 +90,19 @@ impl TcpConnection {
 }
 
 struct UdpConnection {
-    pudp: Arc<Udp2>,
+    sender: SendHalf,
     _handle: DropAbortHandle,
 }
 
 impl UdpConnection {
     async fn run(
-        pudp: Arc<Udp2>,
+        mut rx: RecvHalf,
         mut sender: mpsc::Sender<OwnedUdp>,
         src: SocketAddr,
     ) -> io::Result<()> {
         loop {
             let mut buf = vec![0; 2048];
-            let (size, addr) = pudp.recv_from(&mut buf).await?;
+            let (size, addr) = rx.recv_from(&mut buf).await?;
             buf.truncate(size);
             sender
                 .send(OwnedUdp::new(addr, src, buf))
@@ -115,12 +115,15 @@ impl UdpConnection {
         sender: mpsc::Sender<OwnedUdp>,
         src: SocketAddr,
     ) -> io::Result<UdpConnection> {
-        let pudp: Arc<Udp2> = Arc::new(proxy.new_udp("0.0.0.0:0".parse().unwrap()).await?.into());
-        let (fut, _handle) = abortable(UdpConnection::run(pudp.clone(), sender, src));
+        let (tx, rx) = proxy.new_udp("0.0.0.0:0".parse().unwrap()).await?.split();
+        let (fut, _handle) = abortable(UdpConnection::run(rx, sender, src));
         tokio::spawn(fut);
-        Ok(UdpConnection { pudp, _handle })
+        Ok(UdpConnection {
+            sender: tx,
+            _handle
+        })
     }
-    async fn send_to(&self, buf: &[u8], addr: SocketAddr) -> io::Result<usize> {
-        self.pudp.send_to(buf, addr).await
+    async fn send_to(&mut self, buf: &[u8], addr: SocketAddr) -> io::Result<usize> {
+        self.sender.send_to(buf, addr).await
     }
 }
