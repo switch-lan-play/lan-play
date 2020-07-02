@@ -4,7 +4,6 @@ use drop_abort::{abortable, DropAbortHandle};
 use lru::LruCache;
 use std::io;
 use std::net::SocketAddr;
-use std::sync::Arc;
 use tokio::{sync::{mpsc, Mutex}, io::{copy, split}};
 
 struct Inner {

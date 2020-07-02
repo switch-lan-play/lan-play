@@ -15,11 +15,11 @@ pub struct InterfaceInfo {
     pub description: Option<String>,
 }
 
-impl InterfaceInfo {
-    pub fn new(name: &str) -> InterfaceInfo {
+impl Default for InterfaceInfo {
+    fn default() -> Self {
         InterfaceInfo {
             ethernet_address: EthernetAddress::BROADCAST,
-            name: name.into(),
+            name: "".to_string(),
             description: None,
         }
     }

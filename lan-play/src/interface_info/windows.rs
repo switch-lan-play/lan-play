@@ -30,7 +30,10 @@ pub fn get_interface_info(name: &str) -> Result<InterfaceInfo, Error> {
         let mut size = 0u32;
         let mut table: *mut MibIftable = ptr::null_mut();
 
-        let mut info = InterfaceInfo::new(name);
+        let mut info = InterfaceInfo {
+            name,
+            ..Default::default(),
+        };
 
         unsafe {
             if GetIfTable(
