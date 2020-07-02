@@ -24,7 +24,7 @@ impl LanPlay {
         let (mut opened, errored) = set.open_all_interface();
 
         for ErrorWithDesc(err, desc) in errored {
-            log::warn!(
+            log::debug!(
                 "Err: Interface {:?} ({:?}) err {:?}",
                 desc.name,
                 desc.description,
@@ -41,7 +41,7 @@ impl LanPlay {
         }
 
         for interface in &opened {
-            println!(
+            log::info!(
                 "Interface {} ({}) opened, mac: {}, data link: {}",
                 interface.name(),
                 interface.desc.description,

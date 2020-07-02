@@ -1,5 +1,5 @@
-use super::{other, socket, BoxProxy, BoxTcp, BoxUdp, Proxy, SocketAddr};
-use async_socks5::{connect, AddrKind, Auth, SocksDatagram};
+use super::{other, socket, BoxProxy, BoxTcp, BoxUdp, Proxy, SocketAddr, Auth};
+use async_socks5::{connect, AddrKind, SocksDatagram};
 use tokio::io;
 use tokio::net::{TcpStream, UdpSocket};
 
@@ -24,27 +24,30 @@ impl socket::Udp for SocksDatagram<TcpStream> {
 }
 
 pub struct Socks5Proxy {
-    server: SocketAddr,
-    auth: Option<Auth>,
+    server: String,
+    auth: Option<async_socks5::Auth>,
 }
 
 impl Socks5Proxy {
-    pub fn new(server: SocketAddr, auth: Option<Auth>) -> BoxProxy {
-        Box::new(Self { server, auth })
+    pub fn new(server: String, auth: Option<Auth>) -> BoxProxy {
+        Box::new(Self {
+            server,
+            auth: auth.map(|a| async_socks5::Auth::new(a.username, a.password))
+        })
     }
 }
 
 #[async_trait]
 impl Proxy for Socks5Proxy {
     async fn new_tcp(&self, addr: SocketAddr) -> io::Result<BoxTcp> {
-        let mut socket = TcpStream::connect(self.server.clone()).await?;
+        let mut socket = TcpStream::connect(&self.server).await?;
         connect(&mut socket, addr, self.auth.clone())
             .await
             .map_err(other)?;
         Ok(Box::new(socket))
     }
     async fn new_udp(&self, addr: SocketAddr) -> io::Result<BoxUdp> {
-        let proxy_stream = TcpStream::connect(self.server.clone()).await?;
+        let proxy_stream = TcpStream::connect(&self.server).await?;
         let socket = UdpSocket::bind(addr).await?;
         let udp =
             SocksDatagram::associate(proxy_stream, socket, self.auth.clone(), None::<SocketAddr>)

@@ -82,6 +82,11 @@ pub trait Proxy {
     async fn new_udp(&self, addr: SocketAddr) -> io::Result<BoxUdp>;
 }
 
+pub struct Auth {
+    pub username: String,
+    pub password: String,
+}
+
 #[cfg(test)]
 mod test {
     use super::socks5::test::socks5_server;
@@ -161,7 +166,7 @@ mod test {
             copy(&mut reader, &mut writer).await?;
             Ok::<_, tokio::io::Error>(())
         });
-        let proxy: BoxProxy = Socks5Proxy::new(([127, 0, 0, 1], socks5_port).into(), None);
+        let proxy: BoxProxy = Socks5Proxy::new(format!("127.0.0.1:{}", socks5_port), None);
         let mut tcp = proxy
             .new_tcp(SocketAddr::new([127, 0, 0, 1].into(), port))
             .await
