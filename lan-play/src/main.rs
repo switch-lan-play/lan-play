@@ -84,8 +84,8 @@ async fn main() -> Result<()> {
     let gateway_ip = opt.gateway_ip.into();
     let proxy = match opt.proxy {
         Some(url) if url.scheme() == "socks5" => {
-            log::info!("Use socks5 proxy: {}", url);
             let (addr, auth) = url_into_addr_auth(&url).expect("Failed to parse proxy url");
+            log::info!("Use socks5 proxy: {}", url);
             Socks5Proxy::new(addr, auth)
         },
         None => {

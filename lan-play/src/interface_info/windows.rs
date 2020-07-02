@@ -31,8 +31,8 @@ pub fn get_interface_info(name: &str) -> Result<InterfaceInfo, Error> {
         let mut table: *mut MibIftable = ptr::null_mut();
 
         let mut info = InterfaceInfo {
-            name,
-            ..Default::default(),
+            name: name.to_string(),
+            ..Default::default()
         };
 
         unsafe {

@@ -44,9 +44,11 @@ impl Gateway {
                 }
                 result = tcp.accept() => {
                     if let Ok(tcp) = result {
+                        let (local_addr, peer_addr) = (tcp.local_addr(), tcp.peer_addr());
                         if let Err(e) = self.on_tcp(tcp).await {
                             log::error!("on_tcp {:?}", e);
                         }
+                        log::debug!("new tcp {:?} -> {:?}", local_addr, peer_addr);
                     }
                 }
             };

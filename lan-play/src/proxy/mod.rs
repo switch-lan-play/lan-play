@@ -79,6 +79,7 @@ pub trait Proxy {
     async fn new_udp(&self, addr: SocketAddr) -> io::Result<BoxUdp>;
 }
 
+#[derive(Debug)]
 pub struct Auth {
     pub username: String,
     pub password: String,
