@@ -4,7 +4,7 @@ mod reactor;
 mod socket;
 mod socketset;
 
-use crate::rawsock_socket::RawsockInterface;
+use crate::interface::RawsockInterface;
 use peekable_receiver::PeekableReceiver;
 pub use raw_udp::OwnedUdp;
 use reactor::{NetReactor, ReactorRunner};
