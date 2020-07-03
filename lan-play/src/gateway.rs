@@ -4,28 +4,29 @@ use drop_abort::{abortable, DropAbortHandle};
 use lru::LruCache;
 use std::io;
 use std::net::SocketAddr;
-use tokio::{sync::{mpsc, Mutex}, io::{copy, split}};
+use tokio::{sync::{mpsc, Mutex}, io::{split, copy}};
+use std::sync::Arc;
 
 struct Inner {
     udp_cache: LruCache<SocketAddr, UdpConnection>,
 }
 
 pub struct Gateway {
-    proxy: BoxProxy,
+    proxy: Arc<BoxProxy>,
     inner: Mutex<Inner>,
 }
 
 impl Gateway {
     pub fn new(proxy: BoxProxy) -> Gateway {
         Gateway {
-            proxy,
+            proxy: Arc::new(proxy),
             inner: Mutex::new(Inner {
                 udp_cache: LruCache::new(100),
             }),
         }
     }
     pub async fn process(&self, mut tcp: TcpListener, mut udp: UdpSocket) -> io::Result<()> {
-        let (udp_tx, mut udp_rx) = mpsc::channel(10);
+        let (udp_tx, mut udp_rx) = mpsc::unbounded_channel();
         loop {
             tokio::select! {
                 result = udp.recv() => {
@@ -48,13 +49,13 @@ impl Gateway {
                         if let Err(e) = self.on_tcp(tcp).await {
                             log::error!("on_tcp {:?}", e);
                         }
-                        log::trace!("new tcp {:?} -> {:?}", local_addr, peer_addr);
+                        log::trace!("new tcp  {:?} -> {:?}", peer_addr, local_addr);
                     }
                 }
             };
         }
     }
-    async fn on_udp(&self, udp: OwnedUdp, sender: mpsc::Sender<OwnedUdp>) -> io::Result<()> {
+    async fn on_udp(&self, udp: OwnedUdp, sender: mpsc::UnboundedSender<OwnedUdp>) -> io::Result<()> {
         let mut inner = self.inner.lock().await;
         let src = udp.src();
         if !inner.udp_cache.contains(&src) {
@@ -76,15 +77,27 @@ struct TcpConnection {
 }
 
 impl TcpConnection {
-    async fn new(stcp: TcpSocket, proxy: &BoxProxy) -> io::Result<()> {
-        let ptcp = proxy.new_tcp(stcp.local_addr()?).await?;
-        let (mut s_read, mut s_write) = split(stcp);
-        let (mut p_read, mut p_write) = split(ptcp);
+    async fn new(stcp: TcpSocket, proxy: &Arc<BoxProxy>) -> io::Result<()> {
+        let proxy = proxy.clone();
+
         tokio::spawn(async move {
-            copy(&mut s_read, &mut p_write).await
-        });
-        tokio::spawn(async move {
-            copy(&mut p_read, &mut s_write).await
+            let (local_addr, peer_addr) = (stcp.local_addr(), stcp.peer_addr());
+            let ptcp = proxy.new_tcp(stcp.local_addr()?).await?;
+            let (mut s_read, mut s_write) = split(stcp);
+            let (mut p_read, mut p_write) = split(ptcp);
+            let h1 = tokio::spawn(async move {
+                copy(&mut s_read, &mut p_write).await
+            });
+            let h2 = tokio::spawn(async move {
+                copy(&mut p_read, &mut s_write).await
+            });
+
+            h1.await??;
+            h2.await??;
+
+            log::trace!("tcp done {:?} -> {:?}", peer_addr, local_addr);
+
+            Ok::<(), io::Error>(())
         });
         Ok(())
     }
@@ -110,7 +123,7 @@ impl Drop for UdpConnection {
 impl UdpConnection {
     async fn run(
         mut rx: RecvHalf,
-        mut sender: mpsc::Sender<OwnedUdp>,
+        sender: mpsc::UnboundedSender<OwnedUdp>,
         src: SocketAddr,
     ) -> io::Result<()> {
         loop {
@@ -119,15 +132,15 @@ impl UdpConnection {
             buf.truncate(size);
             sender
                 .send(OwnedUdp::new(addr, src, buf))
-                .await
                 .map_err(other)?;
         }
     }
     async fn new(
-        proxy: &BoxProxy,
-        sender: mpsc::Sender<OwnedUdp>,
+        proxy: &Arc<BoxProxy>,
+        sender: mpsc::UnboundedSender<OwnedUdp>,
         src: SocketAddr,
     ) -> io::Result<UdpConnection> {
+        let proxy = proxy.clone();
         let (tx, rx) = proxy.new_udp("0.0.0.0:0".parse().unwrap()).await?.split();
         let (fut, _handle) = abortable(UdpConnection::run(rx, sender, src));
         tokio::spawn(fut);

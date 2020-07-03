@@ -132,7 +132,7 @@ impl NetReactor {
             let sources = self.sources.lock().unwrap();
             for socket in set.as_set_mut().iter() {
                 let (readable, writable) = match socket {
-                    smoltcp::socket::Socket::Tcp(tcp) => (tcp.can_recv(), tcp.can_send()),
+                    smoltcp::socket::Socket::Tcp(tcp) => (tcp.can_recv() || !tcp.is_open(), tcp.can_send()),
                     smoltcp::socket::Socket::Raw(raw) => (raw.can_recv(), raw.can_send()),
                     _ => continue, // ignore other type
                 };

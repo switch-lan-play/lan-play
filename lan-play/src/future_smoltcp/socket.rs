@@ -124,12 +124,6 @@ impl UdpSocket {
     }
 }
 
-impl Drop for UdpSocket {
-    fn drop(&mut self) {
-        log::trace!("drop {:?}", self);
-    }
-}
-
 impl TcpSocket {
     async fn new(listener: &mut TcpListener) -> TcpSocket {
         let reactor = listener.reactor.clone();
@@ -162,6 +156,9 @@ impl TcpSocket {
             {
                 let mut set = self.reactor.lock_set().await;
                 let mut socket = set.as_set_mut().get::<socket::TcpSocket>(self.handle);
+                if !socket.is_open() {
+                    return Ok(0);
+                }
                 if socket.can_recv() {
                     return socket
                         .recv_slice(buf)
@@ -195,12 +192,6 @@ impl TcpSocket {
             .get::<smoltcp::socket::TcpSocket>(self.handle);
         socket.close();
         Ok(())
-    }
-}
-
-impl Drop for TcpSocket {
-    fn drop(&mut self) {
-        log::trace!("drop {:?}", self);
     }
 }
 
