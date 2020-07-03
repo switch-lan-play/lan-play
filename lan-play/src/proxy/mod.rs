@@ -93,21 +93,21 @@ mod test {
     use tokio::net::{TcpListener, UdpSocket};
     use tokio::prelude::*;
 
-    async fn server_tcp() -> (TcpListener, u16) {
+    async fn server_tcp() -> (TcpListener, SocketAddr) {
         let server = TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let port = server.local_addr().unwrap().port();
-        (server, port)
+        let addr = server.local_addr().unwrap();
+        (server, addr)
     }
 
-    async fn server_udp() -> (UdpSocket, u16) {
+    async fn server_udp() -> (UdpSocket, SocketAddr) {
         let server = UdpSocket::bind("127.0.0.1:0").await.unwrap();
-        let port = server.local_addr().unwrap().port();
-        (server, port)
+        let addr = server.local_addr().unwrap();
+        (server, addr)
     }
 
     #[tokio::test]
     async fn test_direct_proxy() -> tokio::io::Result<()> {
-        let (mut server, port) = server_tcp().await;
+        let (mut server, addr) = server_tcp().await;
         let join = tokio::spawn(async move {
             let (socket, _) = server.accept().await?;
             let (mut reader, mut writer) = split(socket);
@@ -116,7 +116,7 @@ mod test {
         });
         let proxy: BoxProxy = DirectProxy::new();
         let mut tcp = proxy
-            .new_tcp(SocketAddr::new("127.0.0.1".parse().unwrap(), port))
+            .new_tcp(addr)
             .await
             .unwrap();
 
@@ -132,7 +132,7 @@ mod test {
 
     #[tokio::test]
     async fn test_direct_proxy_udp() -> tokio::io::Result<()> {
-        let (mut server, port) = server_udp().await;
+        let (mut server, target) = server_udp().await;
         let join = tokio::spawn(async move {
             let mut buf = [0u8; 65536];
             let (size, addr) = server.recv_from(&mut buf).await?;
@@ -141,7 +141,6 @@ mod test {
         });
         let proxy: BoxProxy = DirectProxy::new();
         let mut udp = proxy.new_udp(*ANY_ADDR).await.unwrap();
-        let target = SocketAddr::new("127.0.0.1".parse().unwrap(), port);
 
         let mut buf = [0u8; 65536];
         udp.send_to(b"hello", target).await?;
@@ -155,18 +154,18 @@ mod test {
 
     #[tokio::test]
     async fn test_socks5_proxy() -> anyhow::Result<()> {
-        let (socks5, socks5_port) = socks5_server().await;
+        let (socks5, socks5_addr) = socks5_server().await;
 
-        let (mut server, port) = server_tcp().await;
+        let (mut server, addr) = server_tcp().await;
         let join = tokio::spawn(async move {
             let (socket, _) = server.accept().await?;
             let (mut reader, mut writer) = split(socket);
             copy(&mut reader, &mut writer).await?;
             Ok::<_, tokio::io::Error>(())
         });
-        let proxy: BoxProxy = Socks5Proxy::new(format!("127.0.0.1:{}", socks5_port), None);
+        let proxy: BoxProxy = Socks5Proxy::new(socks5_addr.to_string(), None);
         let mut tcp = proxy
-            .new_tcp(SocketAddr::new([127, 0, 0, 1].into(), port))
+            .new_tcp(addr)
             .await
             .unwrap();
 

@@ -64,10 +64,11 @@ pub mod test {
     use async_std::task::JoinHandle;
     use fast_socks5::server::{Config, Socks5Socket};
     use std::io;
+    use std::net::SocketAddr;
 
-    pub async fn socks5_server() -> (JoinHandle<io::Result<()>>, u16) {
+    pub async fn socks5_server() -> (JoinHandle<io::Result<()>>, SocketAddr) {
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let port = listener.local_addr().unwrap().port();
+        let addr = listener.local_addr().unwrap();
         let config = Config::default();
         (
             async_std::task::spawn(async move {
@@ -79,7 +80,7 @@ pub mod test {
                     .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
                 Ok(())
             }),
-            port,
+            addr,
         )
     }
 }
