@@ -26,11 +26,13 @@ use structopt::StructOpt;
 
 #[derive(Debug, StructOpt)]
 enum Subcommand {
-    TestNetwork {
+    /// Check proxy setting
+    Check {
         /// Proxy setting e.g. socks5://localhost:1080
         #[structopt(short, long, parse(try_from_str = Url::parse))]
         proxy: Option<Url>,
     },
+    /// Send a ping to relay server
     Ping {
         /// Relay server e.g. localhost:11451
         #[structopt()]
@@ -131,8 +133,15 @@ async fn ping(_relay: &str) -> Result<()> {
     Ok(())
 }
 
-async fn test_proxy(proxy: &Option<Url>) -> Result<()> {
-    let _proxy = parse_proxy(proxy);
+async fn check(proxy: &Option<Url>) -> Result<()> {
+    let proxy = parse_proxy(proxy);
+
+    let addr = proxy::resolve(
+        &proxy,
+        "8.8.8.8:53".parse().unwrap(),
+        "lan-play.cn",
+    ).await;
+    println!("addr {:?}", addr);
 
     Ok(())
 }
@@ -145,7 +154,7 @@ async fn main() -> Result<()> {
     let opt = Opt::from_args();
     match &opt.subcommand {
         Some(Subcommand::Ping { relay }) => ping(relay).await,
-        Some(Subcommand::TestNetwork { proxy }) => test_proxy(proxy).await,
+        Some(Subcommand::Check { proxy }) => check(proxy).await,
         None => run(opt).await,
     }
 }
