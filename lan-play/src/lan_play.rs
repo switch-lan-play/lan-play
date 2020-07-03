@@ -71,6 +71,5 @@ impl LanPlay {
         if let Err(err) = self.gateway.process(tcp, udp).await {
             log::error!("gateway::process failed {:?}", err);
         }
-        println!("process_interface done");
     }
 }

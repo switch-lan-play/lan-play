@@ -37,7 +37,4 @@ impl<T> PeekableReceiver<T> {
         self.temp = self.receiver.recv().await;
         &self.temp
     }
-    pub fn close(&mut self) {
-        self.receiver.close()
-    }
 }
