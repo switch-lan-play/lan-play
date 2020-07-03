@@ -6,7 +6,7 @@ use smoltcp::wire::{EthernetAddress, Ipv4Cidr};
 use std::ffi::CString;
 use std::sync::Arc;
 use std::thread;
-use tokio::sync::mpsc::{channel, Receiver, Sender};
+use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
 use tokio::task;
 
 type Packet = Vec<u8>;
@@ -63,33 +63,32 @@ impl RawsockInterface {
         self,
     ) -> (
         tokio::task::JoinHandle<()>,
-        Sender<Packet>,
-        Receiver<Packet>,
+        UnboundedSender<Packet>,
+        UnboundedReceiver<Packet>,
     ) {
         let interface = self.interface;
-        let (packet_sender, stream) = channel::<Packet>(100);
-        let (sink, packet_receiver) = channel::<Packet>(100);
+        let (packet_sender, stream) = unbounded_channel();
+        let (sink, packet_receiver) = unbounded_channel();
 
         Self::start_thread(interface.clone(), packet_sender);
         let running = task::spawn(Self::run(interface, packet_receiver));
 
         (running, sink, stream)
     }
-    async fn run(interface: Interface, mut packet_receiver: Receiver<Packet>) {
+    async fn run(interface: Interface, mut packet_receiver: UnboundedReceiver<Packet>) {
         while let Some(data) = packet_receiver.recv().await {
             if let Err(e) = interface.send(&data) {
                 log::error!("Failed when sending packet {:?}", e);
             }
         }
     }
-    fn start_thread(interface: Interface, mut packet_sender: Sender<Packet>) {
+    fn start_thread(interface: Interface, packet_sender: UnboundedSender<Packet>) {
         log::debug!("recv thread start");
         thread::spawn(move || {
-            let r = interface.loop_infinite_dyn(&|packet| match futures::executor::block_on(
-                packet_sender.send(packet.as_owned().to_vec()),
-            ) {
-                Ok(_) => {}
-                Err(err) => log::warn!("recv error: {:?}", err),
+            let r = interface.loop_infinite_dyn(&|packet| {
+                if let Err(err) = packet_sender.send(packet.as_owned().to_vec()) {
+                    log::warn!("recv error: {:?}", err);
+                }
             });
             if !r.is_ok() {
                 log::warn!("loop_infinite {:?}", r);

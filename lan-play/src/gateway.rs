@@ -54,7 +54,7 @@ impl Gateway {
             };
         }
     }
-    pub async fn on_udp(&self, udp: OwnedUdp, sender: mpsc::Sender<OwnedUdp>) -> io::Result<()> {
+    async fn on_udp(&self, udp: OwnedUdp, sender: mpsc::Sender<OwnedUdp>) -> io::Result<()> {
         let mut inner = self.inner.lock().await;
         let src = udp.src();
         if !inner.udp_cache.contains(&src) {
@@ -66,7 +66,7 @@ impl Gateway {
         connection.send_to(&udp.data, udp.dst()).await?;
         Ok(())
     }
-    pub async fn on_tcp(&self, tcp: TcpSocket) -> io::Result<()> {
+    async fn on_tcp(&self, tcp: TcpSocket) -> io::Result<()> {
         TcpConnection::new(tcp, &self.proxy).await?;
         Ok(())
     }

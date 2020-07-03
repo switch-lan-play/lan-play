@@ -1,4 +1,4 @@
-use tokio::sync::mpsc::{error::TryRecvError, Receiver};
+use tokio::sync::mpsc::{error::TryRecvError, UnboundedReceiver as Receiver};
 
 pub struct PeekableReceiver<T> {
     temp: Option<T>,
@@ -13,8 +13,8 @@ impl<T> PeekableReceiver<T> {
         }
     }
     pub fn try_recv(&mut self) -> Result<T, TryRecvError> {
-        if self.temp.is_some() {
-            return Ok(self.temp.take().unwrap());
+        if let Some(t) = self.temp.take() {
+            return Ok(t);
         }
         self.receiver.try_recv()
     }

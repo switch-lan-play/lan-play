@@ -113,8 +113,10 @@ impl UdpSocket {
                     .as_set_mut()
                     .get::<smoltcp::socket::RawSocket>(self.handle);
                 if socket.can_send() {
-                    return socket.send_slice(&data.to_raw())
-                        .map_err(map_err)
+                    let r = socket.send_slice(&data.to_raw())
+                        .map_err(map_err);
+                    self.reactor.notify();
+                    return r;
                 }
             }
             self.source.writable(&self.reactor).await?;
@@ -177,8 +179,10 @@ impl TcpSocket {
                     .as_set_mut()
                     .get::<smoltcp::socket::TcpSocket>(self.handle);
                 if socket.can_send() {
-                    return socket.send_slice(data)
+                    let r = socket.send_slice(data)
                         .map_err(map_err);
+                    self.reactor.notify();
+                    return r;
                 }
             }
             self.source.writable(&self.reactor).await?;

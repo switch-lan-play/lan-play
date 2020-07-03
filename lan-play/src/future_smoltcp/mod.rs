@@ -7,7 +7,7 @@ mod socketset;
 use crate::interface::RawsockInterface;
 use peekable_receiver::PeekableReceiver;
 pub use raw_udp::OwnedUdp;
-use reactor::{NetReactor, ReactorRunner};
+use reactor::NetReactor;
 use smoltcp::{
     iface::{
         EthernetInterface as SmoltcpEthernetInterface, EthernetInterfaceBuilder, NeighborCache,
@@ -55,10 +55,7 @@ impl Net {
         let reactor = NetReactor::new(socket_set);
         let r = reactor.clone();
         tokio::spawn(async move {
-            r.run(ReactorRunner {
-                ethernet,
-            })
-            .await
+            r.run(ethernet).await
         });
 
         Net {
@@ -76,11 +73,11 @@ impl Net {
 pub struct FutureDevice {
     caps: DeviceCapabilities,
     receiver: PeekableReceiver<Packet>,
-    sender: mpsc::Sender<Packet>,
+    sender: mpsc::UnboundedSender<Packet>,
 }
 
 impl FutureDevice {
-    fn new(tx: mpsc::Sender<Packet>, rx: mpsc::Receiver<Packet>) -> FutureDevice {
+    fn new(tx: mpsc::UnboundedSender<Packet>, rx: mpsc::UnboundedReceiver<Packet>) -> FutureDevice {
         let mut caps = DeviceCapabilities::default();
         caps.max_transmission_unit = 1536;
         caps.max_burst_size = Some(1);
@@ -105,7 +102,7 @@ impl RxToken for FutureRxToken {
     }
 }
 
-pub struct FutureTxToken(mpsc::Sender<Packet>);
+pub struct FutureTxToken(mpsc::UnboundedSender<Packet>);
 
 impl TxToken for FutureTxToken {
     fn consume<R, F>(self, _timestamp: Instant, len: usize, f: F) -> smoltcp::Result<R>
@@ -116,7 +113,7 @@ impl TxToken for FutureTxToken {
         let result = f(&mut buffer);
         if result.is_ok() {
             let mut s = self.0;
-            if let Err(_e) = s.try_send(buffer) {
+            if let Err(_e) = s.send(buffer) {
                 log::warn!("send error");
             }
         }

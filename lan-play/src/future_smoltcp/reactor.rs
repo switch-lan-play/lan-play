@@ -6,6 +6,7 @@ use std::collections::HashMap;
 use std::io;
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::task::{Poll, Waker};
+use tokio::sync::Notify;
 
 use tokio::time::delay_for;
 
@@ -19,14 +20,11 @@ pub(super) struct Source {
     wakers: Mutex<Wakers>,
 }
 
-pub struct ReactorRunner {
-    pub ethernet: Ethernet,
-}
-
 #[derive(Clone)]
 pub(super) struct NetReactor {
     socket_set: Arc<Mutex<SocketSet>>,
     sources: Arc<Mutex<HashMap<SocketHandle, Arc<Source>>>>,
+    notify: Arc<Notify>,
 }
 
 impl Source {
@@ -75,6 +73,7 @@ impl NetReactor {
         NetReactor {
             socket_set,
             sources: Arc::new(Mutex::new(HashMap::new())),
+            notify: Arc::new(Notify::new()),
         }
     }
     pub async fn lock_set(&self) -> MutexGuard<'_, SocketSet> {
@@ -93,12 +92,12 @@ impl NetReactor {
     pub fn remove(&self, handle: &SocketHandle) {
         self.sources.lock().unwrap().remove(handle);
     }
-    pub async fn run(&self, args: ReactorRunner) {
+    pub fn notify(&self) {
+        self.notify.notify();
+    }
+    pub async fn run(&self, mut ethernet: Ethernet) {
         let default_timeout = Duration::from_millis(1000);
         let sockets = self.socket_set.clone();
-        let ReactorRunner {
-            mut ethernet,
-        } = args;
 
         loop {
             let start = Instant::now();
@@ -112,9 +111,10 @@ impl NetReactor {
             select! {
                 _ = delay_for(deadline.into()).fuse() => {},
                 _ = device.receiver.peek().fuse() => {},
+                _ = self.notify.notified().fuse() => {},
             }
-            let end = Instant::now();
             let mut set = sockets.lock().unwrap();
+            let end = Instant::now();
             let readiness = match ethernet.poll(set.as_set_mut(), end) {
                 Ok(b) => b,
                 Err(smoltcp::Error::Dropped) => false,
