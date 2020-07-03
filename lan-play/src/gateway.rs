@@ -48,7 +48,7 @@ impl Gateway {
                         if let Err(e) = self.on_tcp(tcp).await {
                             log::error!("on_tcp {:?}", e);
                         }
-                        log::debug!("new tcp {:?} -> {:?}", local_addr, peer_addr);
+                        log::trace!("new tcp {:?} -> {:?}", local_addr, peer_addr);
                     }
                 }
             };
@@ -90,9 +90,21 @@ impl TcpConnection {
     }
 }
 
+impl Drop for TcpConnection {
+    fn drop(&mut self) {
+        log::trace!("drop TcpConnection");
+    }
+}
+
 struct UdpConnection {
     sender: SendHalf,
     _handle: DropAbortHandle,
+}
+
+impl Drop for UdpConnection {
+    fn drop(&mut self) {
+        log::trace!("drop UdpConnection");
+    }
 }
 
 impl UdpConnection {

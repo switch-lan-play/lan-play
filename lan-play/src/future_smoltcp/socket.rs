@@ -122,6 +122,12 @@ impl UdpSocket {
     }
 }
 
+impl Drop for UdpSocket {
+    fn drop(&mut self) {
+        log::trace!("drop {:?}", self);
+    }
+}
+
 impl TcpSocket {
     async fn new(listener: &mut TcpListener) -> TcpSocket {
         let reactor = listener.reactor.clone();
@@ -178,6 +184,20 @@ impl TcpSocket {
             self.source.writable(&self.reactor).await?;
         }
     }
+    pub async fn shutdown(&mut self) -> io::Result<()> {
+        let mut set = self.reactor.lock_set().await;
+        let mut socket = set
+            .as_set_mut()
+            .get::<smoltcp::socket::TcpSocket>(self.handle);
+        socket.close();
+        Ok(())
+    }
+}
+
+impl Drop for TcpSocket {
+    fn drop(&mut self) {
+        log::trace!("drop {:?}", self);
+    }
 }
 
 impl std::fmt::Debug for TcpSocket {
@@ -221,8 +241,9 @@ impl AsyncWrite for TcpSocket {
     fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
         Poll::Ready(Ok(()))
     }
-    fn poll_shutdown(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
-        // TODO: implement shutdown
-        Poll::Ready(Ok(()))
+    fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
+        let fut = self.shutdown();
+        futures::pin_mut!(fut);
+        fut.poll(cx)
     }
 }
