@@ -2,7 +2,6 @@ pub use self::direct::DirectProxy;
 pub use self::socks5::Socks5Proxy;
 pub use std::io;
 pub use std::net::{IpAddr, Ipv4Addr, SocketAddr};
-use dns_parser::{Builder, QueryType, QueryClass};
 
 mod direct;
 mod socks5;
@@ -84,7 +83,9 @@ fn io_other(s: &str) -> io::Error {
     io::Error::new(io::ErrorKind::Other, s)
 }
 
-pub async fn resolve(proxy: &BoxProxy, dns_server: SocketAddr, domain: &str) -> io::Result<Vec<SocketAddr>> {
+pub async fn resolve(proxy: &BoxProxy, dns_server: SocketAddr, domain: &str) -> io::Result<Vec<Ipv4Addr>> {
+    use dns_parser::{Builder, QueryType, QueryClass, Packet, RData, rdata::A};
+
     let mut builder = Builder::new_query(1, true);
     builder.add_question(domain, false, QueryType::A, QueryClass::IN);
     let p = builder.build()
@@ -93,11 +94,18 @@ pub async fn resolve(proxy: &BoxProxy, dns_server: SocketAddr, domain: &str) -> 
     let mut buf = vec![0u8; 65536];
     let mut udp = proxy.new_udp("0.0.0.0:0".parse().unwrap()).await?;
     udp.send_to(&p, dns_server).await?;
-    log::debug!("send dns {:?}", p);
     let (size, _addr) = udp.recv_from(&mut buf).await?;
     buf.truncate(size);
-    println!("recv dns {:?}", buf);
-    Ok(vec![])
+
+    let pkt = Packet::parse(&buf)
+        .map_err(|_| io_other("Failed to parse dns response"))?;
+
+    let ans = pkt.answers.iter().filter_map(|a| match a.data {
+        RData::A(A(ip)) => Some(ip),
+        _ => None,
+    }).collect::<Vec<_>>();
+
+    Ok(ans)
 }
 
 #[derive(Debug)]

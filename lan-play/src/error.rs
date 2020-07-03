@@ -1,12 +1,12 @@
-#[derive(Debug)]
+use thiserror::Error;
+
+#[derive(Debug, Error)]
 pub enum Error {
-    RawsockError(rawsock::Error),
+    #[error("RawsockErr {0:?}")]
+    RawsockError(#[from] rawsock::Error),
+    #[error("IoError {0:?}")]
+    IoError(#[from] std::io::Error),
+    #[error("NoInterface")]
     NoInterface,
 }
 pub type Result<T> = std::result::Result<T, Error>;
-
-impl From<rawsock::Error> for Error {
-    fn from(e: rawsock::Error) -> Error {
-        Error::RawsockError(e)
-    }
-}
