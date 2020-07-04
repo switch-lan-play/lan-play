@@ -5,6 +5,7 @@ extern crate lazy_static;
 #[macro_use]
 extern crate async_trait;
 
+mod client;
 mod error;
 mod future_smoltcp;
 mod gateway;
@@ -13,6 +14,7 @@ mod lan_play;
 mod proxy;
 mod interface;
 
+use client::LanClient;
 use error::Result;
 use lan_play::LanPlay;
 use proxy::{DirectProxy, Socks5Proxy, Auth, BoxProxy};
@@ -129,6 +131,7 @@ async fn run(opt: Opt) -> Result<()> {
     let ipv4cidr = Ipv4Cidr::new(opt.gateway_ip.into(), opt.prefix_len);
     let gateway_ip = opt.gateway_ip.into();
     let proxy = parse_proxy(&opt.proxy);
+    let client = LanClient::new();
 
     let set = RawsockInterfaceSet::new(&RAWSOCK_LIB, ipv4cidr)
         .expect("Could not open any packet capturing library");

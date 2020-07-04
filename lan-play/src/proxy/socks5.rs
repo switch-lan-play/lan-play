@@ -52,7 +52,7 @@ impl Proxy for Socks5Proxy {
             SocksDatagram::associate(proxy_stream, socket, self.auth.clone(), None::<SocketAddr>)
                 .await
                 .map_err(other)?;
-        log::debug!("new udp");
+        log::trace!("new udp");
 
         Ok(Box::new(udp))
     }

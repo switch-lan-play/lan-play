@@ -1,4 +1,4 @@
-use super::{Error, ErrorWithDesc, intercepter::IntercepterFn};
+use super::{Error, ErrorWithDesc, intercepter::{IntercepterBuilder, IntercepterFn}};
 use crate::interface_info::{get_interface_info, InterfaceInfo};
 use rawsock::traits::{DynamicInterface, Library};
 use rawsock::InterfaceDescription;
@@ -9,7 +9,7 @@ use std::thread;
 use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
 use tokio::task;
 
-type Packet = Vec<u8>;
+pub type Packet = Vec<u8>;
 type Interface = std::sync::Arc<dyn DynamicInterface<'static> + 'static>;
 pub struct RawsockInterface {
     pub desc: InterfaceDescription,
@@ -61,7 +61,7 @@ impl RawsockInterface {
     }
     pub fn start(
         self,
-        intercepter: IntercepterFn
+        intercepter_builder: IntercepterBuilder,
     ) -> (
         tokio::task::JoinHandle<()>,
         UnboundedSender<Packet>,
@@ -70,6 +70,7 @@ impl RawsockInterface {
         let interface = self.interface;
         let (packet_sender, stream) = unbounded_channel();
         let (sink, packet_receiver) = unbounded_channel();
+        let intercepter = intercepter_builder.build(sink.clone());
 
         Self::start_thread(interface.clone(), packet_sender, intercepter);
         let running = task::spawn(Self::run(interface, packet_receiver));
