@@ -8,7 +8,7 @@ pub struct ShadowsocksProxy {
 
 impl ShadowsocksProxy {
     pub fn new(url: &url::Url) -> io::Result<BoxProxy> {
-        let bind_addr: SocketAddr = "127.13.37.1:10800".parse().unwrap();
+        let bind_addr: SocketAddr = "127.13.37.1:50124".parse().unwrap();
 
         if url.scheme() != "ss" {
             return Err(other("Wrong scheme"))

@@ -90,7 +90,7 @@ impl<'a> Interface<'a> {
             unsafe {
                 let fd = self.dll.pcap_fileno(self.handle);
                 let on: c_int = 1;
-                if (fd == -1) {
+                if fd == -1 {
                     return Err(Error::LibraryError("fileno".to_string()));
                 }
                 if 0 == libc::ioctl(fd, libc::BIOCIMMEDIATE, &on as *const c_int) {

@@ -169,13 +169,14 @@ async fn ping(relay: &str, times: &Option<u64>) -> Result<()> {
 async fn check(proxy: &Option<Url>) -> Result<()> {
     use tokio::prelude::*;
 
+    let domain = "example.org";
     let proxy = parse_proxy(proxy);
 
-    println!("querying DNS record of example.org");
+    println!("querying DNS record of {}", domain);
     let addr = proxy::resolve(
         &proxy,
         "8.8.8.8:53".parse().unwrap(),
-        "example.org",
+        domain,
     ).await?;
     println!("UDP test passed");
 
@@ -184,10 +185,11 @@ async fn check(proxy: &Option<Url>) -> Result<()> {
     if let Some(addr) = addr {
         let success = "HTTP/1.0 200 OK\r\n";
         let addr = *addr;
-        println!("connecting to example.org({:?})", addr);
+        println!("connecting to {}({:?})", domain, addr);
         let mut tcp = proxy.new_tcp(std::net::SocketAddr::new(addr.into(), 80)).await?;
         println!("connected");
-        tcp.write_all(b"GET / HTTP/1.0\r\nHost: example.org\r\n\r\n").await?;
+        let req = format!("GET / HTTP/1.0\r\nHost: {}\r\n\r\n", domain);
+        tcp.write_all(req.as_bytes()).await?;
         let mut ret = String::new();
         tcp.read_to_string(&mut ret).await?;
         if &ret[..success.len()] == success {
