@@ -97,17 +97,29 @@ fn url_into_addr_auth(url: &Url) -> Option<(String, Option<Auth>)> {
 }
 
 fn parse_proxy(proxy: &Option<Url>) -> BoxProxy {
-    match proxy {
+    let r = match proxy {
         Some(url) if url.scheme() == "socks5" => {
             let (addr, auth) = url_into_addr_auth(&url).expect("Failed to parse proxy url");
             log::info!("Use socks5 proxy: {}", url);
-            Socks5Proxy::new(addr, auth)
+            Some(Socks5Proxy::new(addr, auth))
+        },
+        #[cfg(feature = "shadowsocks")]
+        Some(url) if url.scheme() == "ss" => {
+            log::info!("Use shadowsocks proxy: {}", url);
+            proxy::ShadowsocksProxy::new(url).ok()
         },
         None => {
-            DirectProxy::new()
+            Some(DirectProxy::new())
         },
         Some(url) => {
             log::warn!("Unrecognized proxy url: {}, not using proxy", url);
+            Some(DirectProxy::new())
+        }
+    };
+    match r {
+        Some(p) => p,
+        None => {
+            log::warn!("Failed to parse proxy url: {:?}", proxy);
             DirectProxy::new()
         }
     }

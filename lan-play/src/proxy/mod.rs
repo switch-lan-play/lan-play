@@ -5,6 +5,11 @@ pub use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 
 mod direct;
 mod socks5;
+#[cfg(feature = "shadowsocks")]
+mod shadowsocks;
+#[cfg(feature = "shadowsocks")]
+pub use self::shadowsocks::ShadowsocksProxy;
+
 pub use socket::{other, BoxTcp, BoxUdp, SendHalf, RecvHalf};
 pub type BoxProxy = Box<dyn Proxy + Unpin + Sync + Send>;
 lazy_static! {
