@@ -1,4 +1,4 @@
-use super::{Error, ErrorWithDesc};
+use super::{Error, ErrorWithDesc, intercepter::IntercepterFn};
 use crate::interface_info::{get_interface_info, InterfaceInfo};
 use rawsock::traits::{DynamicInterface, Library};
 use rawsock::InterfaceDescription;
@@ -61,6 +61,7 @@ impl RawsockInterface {
     }
     pub fn start(
         self,
+        intercepter: IntercepterFn
     ) -> (
         tokio::task::JoinHandle<()>,
         UnboundedSender<Packet>,
@@ -70,7 +71,7 @@ impl RawsockInterface {
         let (packet_sender, stream) = unbounded_channel();
         let (sink, packet_receiver) = unbounded_channel();
 
-        Self::start_thread(interface.clone(), packet_sender);
+        Self::start_thread(interface.clone(), packet_sender, intercepter);
         let running = task::spawn(Self::run(interface, packet_receiver));
 
         (running, sink, stream)
@@ -82,10 +83,17 @@ impl RawsockInterface {
             }
         }
     }
-    fn start_thread(interface: Interface, packet_sender: UnboundedSender<Packet>) {
+    fn start_thread(
+        interface: Interface,
+        packet_sender: UnboundedSender<Packet>,
+        intercepter: IntercepterFn,
+    ) {
         log::debug!("recv thread start");
         thread::spawn(move || {
             let r = interface.loop_infinite_dyn(&|packet| {
+                if intercepter(packet) {
+                    return
+                }
                 if let Err(err) = packet_sender.send(packet.as_owned().to_vec()) {
                     log::warn!("recv error: {:?}", err);
                 }

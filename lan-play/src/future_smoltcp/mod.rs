@@ -4,7 +4,7 @@ mod reactor;
 mod socket;
 mod socketset;
 
-use crate::interface::RawsockInterface;
+use crate::interface::{RawsockInterface, Intercepter};
 use peekable_receiver::PeekableReceiver;
 pub use raw_udp::OwnedUdp;
 use reactor::NetReactor;
@@ -36,8 +36,11 @@ impl Net {
         ip_addrs: Vec<IpCidr>,
         gateway_ip: Ipv4Address,
         interf: RawsockInterface,
+        intercepter: Intercepter,
     ) -> Net {
-        let (_running, tx, rx) = interf.start();
+        let (_running, tx, rx) = interf.start(
+            intercepter.build()
+        );
         let device = FutureDevice::new(tx, rx);
         let neighbor_cache = NeighborCache::new(BTreeMap::new());
         let mut routes = Routes::new(BTreeMap::new());

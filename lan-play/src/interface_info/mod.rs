@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use smoltcp::wire::EthernetAddress;
 use thiserror::Error;
 
