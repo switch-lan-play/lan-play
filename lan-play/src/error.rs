@@ -8,5 +8,7 @@ pub enum Error {
     IoError(#[from] std::io::Error),
     #[error("NoInterface")]
     NoInterface,
+    #[error("Timed out")]
+    Timedout(#[from] tokio::time::Elapsed)
 }
 pub type Result<T> = std::result::Result<T, Error>;

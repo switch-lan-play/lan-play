@@ -2,8 +2,8 @@ pub use rawsock::BorrowedPacket;
 use tokio::sync::mpsc::UnboundedSender;
 use super::interface::Packet;
 
-pub type IntercepterFn = Box<dyn Fn(&BorrowedPacket) -> bool + Send>;
-pub type IntercepterFactory = Box<dyn Fn(UnboundedSender<Packet>) -> IntercepterFn + Send>;
+pub type IntercepterFn = Box<dyn Fn(&BorrowedPacket) -> bool + Send + 'static>;
+pub type IntercepterFactory = Box<dyn Fn(UnboundedSender<Packet>) -> IntercepterFn + Send + 'static>;
 
 enum UnionIntercepter {
     Func(IntercepterFn),

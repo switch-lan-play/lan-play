@@ -3,6 +3,7 @@ use crate::future_smoltcp::Net;
 use crate::gateway::Gateway;
 use crate::proxy::BoxProxy;
 use crate::interface::{ErrorWithDesc, RawsockInterface, RawsockInterfaceSet, IntercepterBuilder};
+use crate::client::LanClient;
 use futures::future::join_all;
 use smoltcp::wire::{Ipv4Address, Ipv4Cidr};
 
@@ -20,7 +21,7 @@ impl LanPlay {
             gateway_ip,
         }
     }
-    pub async fn start(&mut self, set: &RawsockInterfaceSet, netif: Option<String>) -> Result<()> {
+    pub async fn start(&mut self, set: &RawsockInterfaceSet, netif: Option<String>, client: Option<LanClient>) -> Result<()> {
         let (mut opened, errored) = set.open_all_interface();
 
         for ErrorWithDesc(err, desc) in errored {
@@ -52,18 +53,23 @@ impl LanPlay {
 
         let futures = opened
             .into_iter()
-            .map(|interface| self.process_interface(interface))
+            .map(|interface| {
+                let mut intercepter = IntercepterBuilder::new()
+                    .add(|_packet| {
+                        false
+                    });
+                if let Some(client) = &client {
+                    intercepter = intercepter.add_factory(client.to_intercepter_factory());
+                }
+
+                self.process_interface(interface, intercepter)
+            })
             .collect::<Vec<_>>();
         join_all(futures).await;
 
         Ok(())
     }
-    async fn process_interface(&self, interf: RawsockInterface) {
-        let intercepter = IntercepterBuilder::new()
-            .add(|_packet| {
-                // lan client here
-                false
-            });
+    async fn process_interface(&self, interf: RawsockInterface, intercepter: IntercepterBuilder) {
         let mac = interf.mac();
         let net = Net::new(
             mac.clone(),

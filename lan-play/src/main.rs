@@ -39,6 +39,8 @@ enum Subcommand {
         /// Relay server e.g. localhost:11451
         #[structopt()]
         relay: String,
+        #[structopt(short)]
+        times: Option<u64>,
     },
 }
 
@@ -131,19 +133,35 @@ async fn run(opt: Opt) -> Result<()> {
     let ipv4cidr = Ipv4Cidr::new(opt.gateway_ip.into(), opt.prefix_len);
     let gateway_ip = opt.gateway_ip.into();
     let proxy = parse_proxy(&opt.proxy);
-    let client = LanClient::new();
+    let client = match opt.relay {
+        Some(relay) => Some(LanClient::new(relay).await?),
+        None => None,
+    };
 
     let set = RawsockInterfaceSet::new(&RAWSOCK_LIB, ipv4cidr)
         .expect("Could not open any packet capturing library");
 
     let mut lp = LanPlay::new(proxy, ipv4cidr, gateway_ip);
 
-    lp.start(&set, opt.netif).await?;
+    lp.start(&set, opt.netif, client).await?;
 
     Ok(())
 }
 
-async fn ping(_relay: &str) -> Result<()> {
+async fn ping(relay: &str, times: &Option<u64>) -> Result<()> {
+    use tokio::time::{Instant, Duration, timeout, delay_for};
+
+    let client = LanClient::new(relay.to_string()).await?;
+    let times = times.unwrap_or(4);
+
+    for i in 0..times {
+        let start = Instant::now();
+        timeout(Duration::from_secs(1), client.ping()).await??;
+        println!("ping responsed in {:?} (#{})", start.elapsed(), i + 1);
+        if i + 1 != times {
+            delay_for(Duration::from_secs(1)).await;
+        }
+    }
 
     Ok(())
 }
@@ -189,7 +207,7 @@ async fn main() -> Result<()> {
 
     let opt = Opt::from_args();
     match &opt.subcommand {
-        Some(Subcommand::Ping { relay }) => ping(relay).await,
+        Some(Subcommand::Ping { relay, times  }) => ping(relay, times).await,
         Some(Subcommand::Check { proxy }) => check(proxy).await,
         None => run(opt).await,
     }
