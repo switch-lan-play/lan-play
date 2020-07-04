@@ -8,10 +8,12 @@ pub struct ShadowsocksProxy {
 
 impl ShadowsocksProxy {
     pub fn new(url: &url::Url) -> io::Result<BoxProxy> {
+        let bind_addr: SocketAddr = "127.13.37.1:10800".parse().unwrap();
+
         if url.scheme() != "ss" {
             return Err(other("Wrong scheme"))
         }
-        println!("{:?}", url);
+
         match (url.username(), url.password(), url.host_str(), url.port()) {
             ("", None, Some(content), None) => {
                 // all base64
@@ -31,17 +33,20 @@ impl ShadowsocksProxy {
                 );
                 let mut config = Config::new(ConfigType::Socks5Local);
                 config.server = vec![server];
-                config.local_addr = Some("127.0.0.1:32141".parse().unwrap());
+                config.local_addr = Some(bind_addr.clone().into());
                 config.mode = Mode::TcpAndUdp;
 
                 // log::debug!("shadowsocks config: {:#?}", config);
-                tokio::spawn(run_local(config));
+                tokio::spawn(async {
+                    let r = run_local(config).await;
+                    log::debug!("shadowsocks {:?}", r);
+                });
             }
             _ => return Err(other("Wrong url"))
         }
 
         Ok(Box::new(Self {
-            inner: Socks5Proxy::new("127.0.0.1:32141".to_string(), None),
+            inner: Socks5Proxy::new(bind_addr.to_string(), None),
         }))
     }
 }
