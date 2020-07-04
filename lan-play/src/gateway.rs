@@ -85,17 +85,13 @@ impl TcpConnection {
             let ptcp = proxy.new_tcp(stcp.local_addr()?).await?;
             let (mut s_read, mut s_write) = split(stcp);
             let (mut p_read, mut p_write) = split(ptcp);
-            let h1 = tokio::spawn(async move {
-                copy(&mut s_read, &mut p_write).await
-            });
-            let h2 = tokio::spawn(async move {
-                copy(&mut p_read, &mut s_write).await
-            });
 
-            h1.await??;
-            h2.await??;
+            let r = tokio::try_join!(
+                copy(&mut s_read, &mut p_write),
+                copy(&mut p_read, &mut s_write),
+            );
 
-            log::trace!("tcp done {:?} -> {:?}", peer_addr, local_addr);
+            log::trace!("tcp done {:?} -> {:?} ({:?})", peer_addr, local_addr, r);
 
             Ok::<(), io::Error>(())
         });
