@@ -76,7 +76,7 @@ impl NetReactor {
             notify: Arc::new(Notify::new()),
         }
     }
-    pub async fn lock_set(&self) -> MutexGuard<'_, SocketSet> {
+    pub fn lock_set(&self) -> MutexGuard<'_, SocketSet> {
         self.socket_set.lock().unwrap()
     }
     pub fn insert(&self, handle: SocketHandle) -> Arc<Source> {

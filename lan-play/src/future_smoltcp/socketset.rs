@@ -15,6 +15,9 @@ impl SocketSet {
     pub fn as_set_mut(&mut self) -> &mut InnerSocketSet<'static, 'static, 'static> {
         &mut self.set
     }
+    pub fn remove(&mut self, handle: SocketHandle) {
+        self.set.remove(handle);
+    }
     pub fn new_tcp_socket(&mut self) -> SocketHandle {
         let handle = self.set.add(new_tcp_socket());
         handle

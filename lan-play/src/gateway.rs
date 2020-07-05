@@ -62,6 +62,7 @@ impl Gateway {
             inner
                 .udp_cache
                 .put(src, UdpConnection::new(&self.proxy, sender, src).await?);
+            log::trace!("new udp from {:?}", src);
         }
         let connection = inner.udp_cache.get_mut(&src).unwrap();
         connection.send_to(&udp.data, udp.dst()).await?;

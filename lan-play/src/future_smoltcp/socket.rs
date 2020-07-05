@@ -37,7 +37,9 @@ pub struct UdpSocket {
 
 impl Drop for TcpListener {
     fn drop(&mut self) {
-        self.reactor.remove(&self.handle)
+        self.reactor.remove(&self.handle);
+        let mut set = self.reactor.lock_set();
+        set.remove(self.handle);
     }
 }
 
@@ -47,7 +49,7 @@ fn map_err(e: smoltcp::Error) -> io::Error {
 
 impl TcpListener {
     pub(super) async fn new(reactor: NetReactor) -> TcpListener {
-        let mut set = reactor.lock_set().await;
+        let mut set = reactor.lock_set();
         let handle = set.new_tcp_socket();
         drop(set);
 
@@ -62,7 +64,7 @@ impl TcpListener {
     pub async fn accept(&mut self) -> io::Result<TcpSocket> {
         loop {
             {
-                let mut set = self.reactor.lock_set().await;
+                let mut set = self.reactor.lock_set();
                 let socket = set.as_set_mut().get::<socket::TcpSocket>(self.handle);
                 if socket.can_send() {
                     drop(socket);
@@ -77,7 +79,7 @@ impl TcpListener {
 
 impl UdpSocket {
     pub(super) async fn new(reactor: NetReactor) -> UdpSocket {
-        let mut set = reactor.lock_set().await;
+        let mut set = reactor.lock_set();
         let handle = set.new_raw_socket();
         drop(set);
 
@@ -92,7 +94,7 @@ impl UdpSocket {
     pub async fn recv(&mut self) -> io::Result<OwnedUdp> {
         loop {
             {
-                let mut set = self.reactor.lock_set().await;
+                let mut set = self.reactor.lock_set();
                 let mut socket = set.as_set_mut().get::<socket::RawSocket>(self.handle);
                 if socket.can_recv() {
                     return socket
@@ -108,7 +110,7 @@ impl UdpSocket {
     pub async fn send(&mut self, data: OwnedUdp) -> io::Result<()> {
         loop {
             {
-                let mut set = self.reactor.lock_set().await;
+                let mut set = self.reactor.lock_set();
                 let mut socket = set
                     .as_set_mut()
                     .get::<smoltcp::socket::RawSocket>(self.handle);
@@ -127,7 +129,7 @@ impl UdpSocket {
 impl TcpSocket {
     async fn new(listener: &mut TcpListener) -> TcpSocket {
         let reactor = listener.reactor.clone();
-        let mut set = reactor.lock_set().await;
+        let mut set = reactor.lock_set();
         let socket = set.as_set_mut().get::<socket::TcpSocket>(listener.handle);
         let local_addr = endpoint2socketaddr(&socket.local_endpoint());
         let peer_addr = endpoint2socketaddr(&socket.remote_endpoint());
@@ -154,7 +156,7 @@ impl TcpSocket {
     pub async fn recv(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         loop {
             {
-                let mut set = self.reactor.lock_set().await;
+                let mut set = self.reactor.lock_set();
                 let mut socket = set.as_set_mut().get::<socket::TcpSocket>(self.handle);
                 if !socket.is_open() {
                     return Ok(0);
@@ -171,7 +173,7 @@ impl TcpSocket {
     pub async fn send(&mut self, data: &[u8]) -> io::Result<usize> {
         loop {
             {
-                let mut set = self.reactor.lock_set().await;
+                let mut set = self.reactor.lock_set();
                 let mut socket = set
                     .as_set_mut()
                     .get::<smoltcp::socket::TcpSocket>(self.handle);
@@ -186,12 +188,20 @@ impl TcpSocket {
         }
     }
     pub async fn shutdown(&mut self) -> io::Result<()> {
-        let mut set = self.reactor.lock_set().await;
+        let mut set = self.reactor.lock_set();
         let mut socket = set
             .as_set_mut()
             .get::<smoltcp::socket::TcpSocket>(self.handle);
         socket.close();
         Ok(())
+    }
+}
+
+impl Drop for TcpSocket {
+    fn drop(&mut self) {
+        self.reactor.remove(&self.handle);
+        let mut set = self.reactor.lock_set();
+        set.remove(self.handle);
     }
 }
 
