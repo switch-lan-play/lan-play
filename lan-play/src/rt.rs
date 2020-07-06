@@ -14,7 +14,7 @@ pub use tokio::{
 mod async_std_exports {
     pub use async_std::{
         task::{spawn, JoinHandle},
-        future::{timeout},
+        future::{timeout, TimeoutError as Elapsed},
         stream::{interval},
         io::{Read as AsyncRead, Write as AsyncWrite},
         net::{TcpStream, TcpListener, UdpSocket},
@@ -23,6 +23,12 @@ mod async_std_exports {
         main,
     };
     pub use std::time::{Instant, Duration};
+
+    use async_std::future;
+    use async_std::prelude::*;
+    pub fn delay_for(d: Duration) -> impl std::future::Future<Output = ()> {
+        future::ready(()).delay(d)
+    }
 }
 #[cfg(feature = "async-std")]
 pub use async_std_exports::*;
