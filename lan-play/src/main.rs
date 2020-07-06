@@ -1,9 +1,13 @@
+#![recursion_limit="256"]
+
 #[macro_use]
 extern crate cfg_if;
 #[macro_use]
 extern crate lazy_static;
 #[macro_use]
 extern crate async_trait;
+#[macro_use]
+extern crate futures;
 
 mod client;
 mod error;
@@ -13,6 +17,7 @@ mod interface_info;
 mod lan_play;
 mod proxy;
 mod interface;
+mod rt;
 
 use client::LanClient;
 use error::Result;
@@ -149,7 +154,7 @@ async fn run(opt: Opt) -> Result<()> {
 }
 
 async fn ping(relay: &str, times: &Option<u64>) -> Result<()> {
-    use tokio::time::{Instant, Duration, timeout, delay_for};
+    use crate::rt::{Instant, Duration, timeout, delay_for};
 
     let client = LanClient::new(relay.to_string()).await?;
     let times = times.unwrap_or(4);
@@ -167,7 +172,7 @@ async fn ping(relay: &str, times: &Option<u64>) -> Result<()> {
 }
 
 async fn check(proxy: &Option<Url>) -> Result<()> {
-    use tokio::prelude::*;
+    use crate::rt::prelude::*;
 
     let domain = "example.org";
     let proxy = parse_proxy(proxy);
@@ -202,7 +207,7 @@ async fn check(proxy: &Option<Url>) -> Result<()> {
     Ok(())
 }
 
-#[tokio::main]
+#[rt::main]
 async fn main() -> Result<()> {
     dotenv::dotenv().ok();
     env_logger::from_env(env_logger::Env::default().default_filter_or("info")).init();

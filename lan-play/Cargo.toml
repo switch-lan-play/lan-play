@@ -6,7 +6,8 @@ edition = "2018"
 
 [dependencies]
 bytes = "0.5"
-tokio = { version = "0.2.21", features = ["full"] }
+tokio = { version = "0.2.21", features = ["full"], optional = true }
+async-std = { version = "1.6", optional = true }
 futures = "0.3.5"
 rawsock = { version = "0.3", path = "../rawsock" }
 crossbeam-utils = "0.6"
@@ -28,7 +29,7 @@ shadowsocks-rust = { version = "1.8.12", optional = true }
 base64 = { version = "0.12.3", optional = true }
 
 [features]
-default = []
+default = [ "tokio" ]
 shadowsocks = [ "shadowsocks-rust", "base64" ]
 
 [dependencies.smoltcp]

@@ -18,8 +18,8 @@ lazy_static! {
 
 pub mod socket {
     use std::{net::SocketAddr, sync::{Arc, Mutex as SyncMutex}};
-    use tokio::{
-        io::{self, AsyncRead, AsyncWrite},
+    use crate::rt::{
+        io, AsyncRead, AsyncWrite,
     };
     use futures::{future::{poll_fn, Future}, pin_mut};
 
@@ -123,9 +123,9 @@ pub struct Auth {
 mod test {
     use super::socks5::test::socks5_server;
     use super::*;
-    use tokio::io::{copy, split};
-    use tokio::net::{TcpListener, UdpSocket};
-    use tokio::prelude::*;
+    use crate::rt::{io, copy, split, spawn};
+    use crate::rt::{TcpListener, UdpSocket};
+    use crate::rt::prelude::*;
 
     async fn server_tcp() -> (TcpListener, SocketAddr) {
         let server = TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -139,14 +139,14 @@ mod test {
         (server, addr)
     }
 
-    #[tokio::test]
-    async fn test_direct_proxy() -> tokio::io::Result<()> {
+    #[crate::rt::test]
+    async fn test_direct_proxy() -> io::Result<()> {
         let (mut server, addr) = server_tcp().await;
-        let join = tokio::spawn(async move {
+        let join = spawn(async move {
             let (socket, _) = server.accept().await?;
             let (mut reader, mut writer) = split(socket);
             copy(&mut reader, &mut writer).await?;
-            Ok::<_, tokio::io::Error>(())
+            Ok::<_, io::Error>(())
         });
         let proxy: BoxProxy = DirectProxy::new();
         let mut tcp = proxy
@@ -164,14 +164,14 @@ mod test {
         Ok(())
     }
 
-    #[tokio::test]
-    async fn test_direct_proxy_udp() -> tokio::io::Result<()> {
+    #[crate::rt::test]
+    async fn test_direct_proxy_udp() -> io::Result<()> {
         let (mut server, target) = server_udp().await;
-        let join = tokio::spawn(async move {
+        let join = spawn(async move {
             let mut buf = [0u8; 65536];
             let (size, addr) = server.recv_from(&mut buf).await?;
             server.send_to(&buf[..size], addr).await?;
-            Ok::<_, tokio::io::Error>(())
+            Ok::<_, io::Error>(())
         });
         let proxy: BoxProxy = DirectProxy::new();
         let mut udp = proxy.new_udp(*ANY_ADDR).await.unwrap();
@@ -186,16 +186,16 @@ mod test {
         Ok(())
     }
 
-    #[tokio::test]
+    #[crate::rt::test]
     async fn test_socks5_proxy() -> anyhow::Result<()> {
         let (socks5, socks5_addr) = socks5_server().await;
 
         let (mut server, addr) = server_tcp().await;
-        let join = tokio::spawn(async move {
+        let join = spawn(async move {
             let (socket, _) = server.accept().await?;
             let (mut reader, mut writer) = split(socket);
             copy(&mut reader, &mut writer).await?;
-            Ok::<_, tokio::io::Error>(())
+            Ok::<_, io::Error>(())
         });
         let proxy: BoxProxy = Socks5Proxy::new(socks5_addr.to_string(), None);
         let mut tcp = proxy

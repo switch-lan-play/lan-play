@@ -21,7 +21,7 @@ pub use socket::{SocketHandle, TcpListener, TcpSocket, UdpSocket};
 use socketset::SocketSet;
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
-use tokio::sync::mpsc::{self, error::TryRecvError};
+use crate::rt::{Sender, Receiver, TryRecvError};
 
 type Packet = Vec<u8>;
 pub type Ethernet = SmoltcpEthernetInterface<'static, 'static, 'static, FutureDevice>;
@@ -57,7 +57,7 @@ impl Net {
         let socket_set = Arc::new(Mutex::new(SocketSet::new()));
         let reactor = NetReactor::new(socket_set);
         let r = reactor.clone();
-        tokio::spawn(async move {
+        crate::rt::spawn(async move {
             r.run(ethernet).await
         });
 
@@ -76,11 +76,11 @@ impl Net {
 pub struct FutureDevice {
     caps: DeviceCapabilities,
     receiver: PeekableReceiver<Packet>,
-    sender: mpsc::UnboundedSender<Packet>,
+    sender: Sender<Packet>,
 }
 
 impl FutureDevice {
-    fn new(tx: mpsc::UnboundedSender<Packet>, rx: mpsc::UnboundedReceiver<Packet>) -> FutureDevice {
+    fn new(tx: Sender<Packet>, rx: Receiver<Packet>) -> FutureDevice {
         let mut caps = DeviceCapabilities::default();
         caps.max_transmission_unit = 1536;
         caps.max_burst_size = Some(1);
@@ -105,7 +105,7 @@ impl RxToken for FutureRxToken {
     }
 }
 
-pub struct FutureTxToken(mpsc::UnboundedSender<Packet>);
+pub struct FutureTxToken(Sender<Packet>);
 
 impl TxToken for FutureTxToken {
     fn consume<R, F>(self, _timestamp: Instant, len: usize, f: F) -> smoltcp::Result<R>

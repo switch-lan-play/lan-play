@@ -1,13 +1,12 @@
 use super::{Error, ErrorWithDesc, intercepter::{IntercepterBuilder, IntercepterFn}};
 use crate::interface_info::{get_interface_info, InterfaceInfo};
+use crate::rt::{spawn, channel, Receiver, Sender, JoinHandle};
 use rawsock::traits::{DynamicInterface, Library};
 use rawsock::InterfaceDescription;
 use smoltcp::wire::{EthernetAddress, Ipv4Cidr};
 use std::ffi::CString;
 use std::sync::Arc;
 use std::thread;
-use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
-use tokio::task;
 
 pub type Packet = Vec<u8>;
 type Interface = std::sync::Arc<dyn DynamicInterface<'static> + 'static>;
@@ -63,21 +62,21 @@ impl RawsockInterface {
         self,
         intercepter_builder: IntercepterBuilder,
     ) -> (
-        tokio::task::JoinHandle<()>,
-        UnboundedSender<Packet>,
-        UnboundedReceiver<Packet>,
+        JoinHandle<()>,
+        Sender<Packet>,
+        Receiver<Packet>,
     ) {
         let interface = self.interface;
-        let (packet_sender, stream) = unbounded_channel();
-        let (sink, packet_receiver) = unbounded_channel();
+        let (packet_sender, stream) = channel();
+        let (sink, packet_receiver) = channel();
         let intercepter = intercepter_builder.build(sink.clone());
 
         Self::start_thread(interface.clone(), packet_sender, intercepter);
-        let running = task::spawn(Self::run(interface, packet_receiver));
+        let running = spawn(Self::run(interface, packet_receiver));
 
         (running, sink, stream)
     }
-    async fn run(interface: Interface, mut packet_receiver: UnboundedReceiver<Packet>) {
+    async fn run(interface: Interface, mut packet_receiver: Receiver<Packet>) {
         while let Some(data) = packet_receiver.recv().await {
             if let Err(e) = interface.send(&data) {
                 log::error!("Failed when sending packet {:?}", e);
@@ -86,7 +85,7 @@ impl RawsockInterface {
     }
     fn start_thread(
         interface: Interface,
-        packet_sender: UnboundedSender<Packet>,
+        packet_sender: Sender<Packet>,
         intercepter: IntercepterFn,
     ) {
         log::debug!("recv thread start");

@@ -9,6 +9,6 @@ pub enum Error {
     #[error("NoInterface")]
     NoInterface,
     #[error("Timed out")]
-    Timedout(#[from] tokio::time::Elapsed)
+    Timedout(#[from] crate::rt::Elapsed)
 }
 pub type Result<T> = std::result::Result<T, Error>;

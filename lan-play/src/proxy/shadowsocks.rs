@@ -37,7 +37,7 @@ impl ShadowsocksProxy {
                 config.mode = Mode::TcpAndUdp;
 
                 // log::debug!("shadowsocks config: {:#?}", config);
-                tokio::spawn(async {
+                crate::rt::spawn(async {
                     let r = run_local(config).await;
                     log::debug!("shadowsocks {:?}", r);
                 });

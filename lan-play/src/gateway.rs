@@ -1,11 +1,12 @@
 use crate::future_smoltcp::{OwnedUdp, TcpListener, TcpSocket, UdpSocket};
 use crate::proxy::{other, BoxProxy, SendHalf, RecvHalf};
+use crate::rt::{Mutex, split, copy, Sender, channel};
 use drop_abort::{abortable, DropAbortHandle};
 use lru::LruCache;
 use std::io;
 use std::net::SocketAddr;
-use tokio::{sync::{mpsc, Mutex}, io::{split, copy}};
 use std::sync::Arc;
+use futures::{select, future::FutureExt};
 
 struct Inner {
     udp_cache: LruCache<SocketAddr, UdpConnection>,
@@ -26,24 +27,24 @@ impl Gateway {
         }
     }
     pub async fn process(&self, mut tcp: TcpListener, mut udp: UdpSocket) -> io::Result<()> {
-        let (udp_tx, mut udp_rx) = mpsc::unbounded_channel();
+        let (udp_tx, mut udp_rx) = channel();
         loop {
-            tokio::select! {
-                result = udp.recv() => {
+            select! {
+                result = udp.recv().fuse() => {
                     if let Ok(udp) = result {
                         if let Err(e) = self.on_udp(udp, udp_tx.clone()).await {
                             log::error!("on_udp {:?}", e);
                         }
                     }
                 }
-                p = udp_rx.recv() => {
+                p = udp_rx.recv().fuse() => {
                     if let Some(p) = p {
                         if let Err(e) = udp.send(p).await {
                             log::error!("udp.send {:?}", e);
                         }
                     }
                 }
-                result = tcp.accept() => {
+                result = tcp.accept().fuse() => {
                     if let Ok(tcp) = result {
                         let (local_addr, peer_addr) = (tcp.local_addr(), tcp.peer_addr());
                         if let Err(e) = self.on_tcp(tcp).await {
@@ -55,7 +56,7 @@ impl Gateway {
             };
         }
     }
-    async fn on_udp(&self, udp: OwnedUdp, sender: mpsc::UnboundedSender<OwnedUdp>) -> io::Result<()> {
+    async fn on_udp(&self, udp: OwnedUdp, sender: Sender<OwnedUdp>) -> io::Result<()> {
         let mut inner = self.inner.lock().await;
         let src = udp.src();
         if !inner.udp_cache.contains(&src) {
@@ -81,13 +82,13 @@ impl TcpConnection {
     async fn new(stcp: TcpSocket, proxy: &Arc<BoxProxy>) -> io::Result<()> {
         let proxy = proxy.clone();
 
-        tokio::spawn(async move {
+        crate::rt::spawn(async move {
             let (local_addr, peer_addr) = (stcp.local_addr(), stcp.peer_addr());
             let ptcp = proxy.new_tcp(stcp.local_addr()?).await?;
             let (mut s_read, mut s_write) = split(stcp);
             let (mut p_read, mut p_write) = split(ptcp);
 
-            let r = tokio::try_join!(
+            let r = futures::try_join!(
                 copy(&mut s_read, &mut p_write),
                 copy(&mut p_read, &mut s_write),
             );
@@ -120,7 +121,7 @@ impl Drop for UdpConnection {
 impl UdpConnection {
     async fn run(
         mut rx: RecvHalf,
-        sender: mpsc::UnboundedSender<OwnedUdp>,
+        sender: Sender<OwnedUdp>,
         src: SocketAddr,
     ) -> io::Result<()> {
         loop {
@@ -134,13 +135,13 @@ impl UdpConnection {
     }
     async fn new(
         proxy: &Arc<BoxProxy>,
-        sender: mpsc::UnboundedSender<OwnedUdp>,
+        sender: Sender<OwnedUdp>,
         src: SocketAddr,
     ) -> io::Result<UdpConnection> {
         let proxy = proxy.clone();
         let (tx, rx) = proxy.new_udp("0.0.0.0:0".parse().unwrap()).await?.split();
         let (fut, _handle) = abortable(UdpConnection::run(rx, sender, src));
-        tokio::spawn(fut);
+        crate::rt::spawn(fut);
         Ok(UdpConnection {
             sender: tx,
             _handle

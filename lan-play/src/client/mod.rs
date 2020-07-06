@@ -1,9 +1,7 @@
 mod protocol;
 
 use crate::interface::{IntercepterFactory, Packet, BorrowedPacket};
-use tokio::sync::{mpsc::UnboundedSender, Mutex};
-use tokio::net::UdpSocket;
-use tokio::time::{interval, Duration};
+use crate::rt::{Sender, Mutex, UdpSocket, interval, Duration};
 use futures::stream::StreamExt;
 use std::sync::Arc;
 use std::io;
@@ -22,7 +20,7 @@ pub struct LanClient {
 
 struct LanClientIntercepter {
     inner: Arc<Mutex<Inner>>,
-    sender: UnboundedSender<Packet>,
+    sender: Sender<Packet>,
 }
 
 impl LanClientIntercepter {
@@ -42,7 +40,7 @@ impl LanClient {
             socket,
         }));
         let inner2 = inner.clone();
-        tokio::spawn(interval(Duration::from_secs(30))
+        crate::rt::spawn(interval(Duration::from_secs(30))
             .for_each(move |_| {
                 let inner = inner2.clone();
                 async move {
@@ -59,7 +57,7 @@ impl LanClient {
     }
     pub fn to_intercepter_factory(&self) -> IntercepterFactory {
         let inner = self.inner.clone();
-        Box::new(move |sender: UnboundedSender<Packet>| {
+        Box::new(move |sender: Sender<Packet>| {
             let intercepter = LanClientIntercepter { inner: inner.clone(), sender };
             Box::new(move |pkt: &BorrowedPacket| {
                 intercepter.process(pkt)

@@ -1,3 +1,4 @@
+use crate::rt::{Notify, delay_for};
 use super::{Ethernet, SocketHandle, SocketSet};
 use futures::prelude::*;
 use futures::select;
@@ -6,9 +7,6 @@ use std::collections::HashMap;
 use std::io;
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::task::{Poll, Waker};
-use tokio::sync::Notify;
-
-use tokio::time::delay_for;
 
 #[derive(Debug)]
 pub struct Wakers {

@@ -1,4 +1,4 @@
-use tokio::sync::mpsc::{error::TryRecvError, UnboundedReceiver as Receiver};
+use crate::rt::{TryRecvError, Receiver};
 
 pub struct PeekableReceiver<T> {
     temp: Option<T>,

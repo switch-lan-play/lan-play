@@ -1,7 +1,6 @@
+use crate::rt::{TcpStream, UdpSocket, io, BufWriter};
 use super::{other, socket, BoxProxy, BoxTcp, BoxUdp, Proxy, SocketAddr, Auth};
 use async_socks5::{connect, AddrKind, SocksDatagram};
-use tokio::io::{self, BufWriter};
-use tokio::net::{TcpStream, UdpSocket};
 
 #[async_trait]
 impl socket::Udp for SocksDatagram<BufWriter<TcpStream>> {
