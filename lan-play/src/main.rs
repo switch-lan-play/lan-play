@@ -6,8 +6,6 @@ extern crate cfg_if;
 extern crate lazy_static;
 #[macro_use]
 extern crate async_trait;
-#[macro_use]
-extern crate futures;
 
 mod client;
 mod error;

@@ -34,7 +34,7 @@ impl<T> PeekableReceiver<T> {
     //     }
     // }
     pub async fn peek(&mut self) -> &Option<T> {
-        self.temp = self.receiver.recv().await;
+        self.temp = self.receiver.recv().await.ok();
         &self.temp
     }
 }

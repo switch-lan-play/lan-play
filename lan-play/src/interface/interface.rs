@@ -76,8 +76,8 @@ impl RawsockInterface {
 
         (running, sink, stream)
     }
-    async fn run(interface: Interface, mut packet_receiver: Receiver<Packet>) {
-        while let Some(data) = packet_receiver.recv().await {
+    async fn run(interface: Interface, packet_receiver: Receiver<Packet>) {
+        while let Ok(data) = packet_receiver.recv().await {
             if let Err(e) = interface.send(&data) {
                 log::error!("Failed when sending packet {:?}", e);
             }
@@ -94,7 +94,7 @@ impl RawsockInterface {
                 if intercepter(packet) {
                     return
                 }
-                if let Err(err) = packet_sender.send(packet.as_owned().to_vec()) {
+                if let Err(err) = packet_sender.try_send(packet.as_owned().to_vec()) {
                     log::warn!("recv error: {:?}", err);
                 }
             });

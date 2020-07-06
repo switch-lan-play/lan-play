@@ -27,7 +27,7 @@ impl Gateway {
         }
     }
     pub async fn process(&self, mut tcp: TcpListener, mut udp: UdpSocket) -> io::Result<()> {
-        let (udp_tx, mut udp_rx) = channel();
+        let (udp_tx, udp_rx) = channel();
         loop {
             select! {
                 result = udp.recv().fuse() => {
@@ -38,7 +38,8 @@ impl Gateway {
                     }
                 }
                 p = udp_rx.recv().fuse() => {
-                    if let Some(p) = p {
+                    // TODO handle error
+                    if let Ok(p) = p {
                         if let Err(e) = udp.send(p).await {
                             log::error!("udp.send {:?}", e);
                         }
@@ -129,7 +130,7 @@ impl UdpConnection {
             let (size, addr) = rx.recv_from(&mut buf).await?;
             buf.truncate(size);
             sender
-                .send(OwnedUdp::new(addr, src, buf))
+                .try_send(OwnedUdp::new(addr, src, buf))
                 .map_err(other)?;
         }
     }
