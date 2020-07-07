@@ -9,4 +9,4 @@ members = [
 # path = '../smoltcp'
 
 [profile.release]
-lto = "fat"
+lto = "thin"

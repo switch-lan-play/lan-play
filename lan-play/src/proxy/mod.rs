@@ -122,6 +122,7 @@ pub struct Auth {
 }
 
 #[cfg(test)]
+#[cfg(feature = "socks5")]
 mod test {
     use super::socks5::test::socks5_server;
     use super::*;

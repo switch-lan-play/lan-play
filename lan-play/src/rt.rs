@@ -27,6 +27,13 @@ mod async_std_exports {
 
     use async_std::future;
     use async_std::prelude::*;
+    use futures::io::{ReadHalf, WriteHalf, AsyncReadExt};
+    pub fn split<T>(stream: T) -> (ReadHalf<T>, WriteHalf<T>)
+    where
+        T: AsyncRead + AsyncWrite,
+    {
+        stream.split()
+    }
     pub fn delay_for(d: Duration) -> impl std::future::Future<Output = ()> {
         future::ready(()).delay(d)
     }
