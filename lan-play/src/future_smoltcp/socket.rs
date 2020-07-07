@@ -246,7 +246,14 @@ impl AsyncWrite for TcpSocket {
     fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
         Poll::Ready(Ok(()))
     }
+    #[cfg(feature = "tokio")]
     fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
+        let fut = self.shutdown();
+        futures::pin_mut!(fut);
+        fut.poll(cx)
+    }
+    #[cfg(feature = "async_std")]
+    fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
         let fut = self.shutdown();
         futures::pin_mut!(fut);
         fut.poll(cx)

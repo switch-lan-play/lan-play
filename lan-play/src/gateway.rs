@@ -1,6 +1,6 @@
 use crate::future_smoltcp::{OwnedUdp, TcpListener, TcpSocket, UdpSocket};
 use crate::proxy::{other, BoxProxy, SendHalf, RecvHalf};
-use crate::rt::{Mutex, split, copy, Sender, channel};
+use crate::rt::{Mutex, copy, Sender, channel};
 use drop_abort::{abortable, DropAbortHandle};
 use lru::LruCache;
 use std::io;
@@ -86,8 +86,10 @@ impl TcpConnection {
         crate::rt::spawn(async move {
             let (local_addr, peer_addr) = (stcp.local_addr(), stcp.peer_addr());
             let ptcp = proxy.new_tcp(stcp.local_addr()?).await?;
-            let (mut s_read, mut s_write) = split(stcp);
-            let (mut p_read, mut p_write) = split(ptcp);
+            // let (mut s_read, mut s_write) = split(stcp);
+            // let (mut p_read, mut p_write) = split(ptcp);
+            let (s_read, s_write) = &mut (&stcp, &stcp);
+            let (p_read, p_write) = &mut (&ptcp, &ptcp);
 
             let r = futures::try_join!(
                 copy(&mut s_read, &mut p_write),

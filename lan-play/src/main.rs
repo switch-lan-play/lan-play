@@ -20,7 +20,7 @@ mod rt;
 use client::LanClient;
 use error::Result;
 use lan_play::LanPlay;
-use proxy::{DirectProxy, Socks5Proxy, Auth, BoxProxy};
+use proxy::{DirectProxy, Auth, BoxProxy};
 use rawsock::traits::Library;
 use interface::RawsockInterfaceSet;
 use smoltcp::wire::Ipv4Cidr;
@@ -105,6 +105,7 @@ fn url_into_addr_auth(url: &Url) -> Option<(String, Option<Auth>)> {
 
 fn parse_proxy(proxy: &Option<Url>) -> BoxProxy {
     let r = match proxy {
+        #[cfg(feature = "socks5")]
         Some(url) if url.scheme() == "socks5" => {
             let (addr, auth) = url_into_addr_auth(&url).expect("Failed to parse proxy url");
             log::info!("Use socks5 proxy: {}", url);

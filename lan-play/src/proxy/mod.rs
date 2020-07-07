@@ -1,10 +1,12 @@
 pub use self::direct::DirectProxy;
-pub use self::socks5::Socks5Proxy;
 pub use std::io;
 pub use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 
 mod direct;
+#[cfg(feature = "socks5")]
 mod socks5;
+#[cfg(feature = "socks5")]
+pub use self::socks5::Socks5Proxy;
 #[cfg(feature = "shadowsocks")]
 mod shadowsocks;
 #[cfg(feature = "shadowsocks")]
