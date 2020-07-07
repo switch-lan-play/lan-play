@@ -2,10 +2,27 @@ use crate::error::{Error, Result};
 use crate::future_smoltcp::Net;
 use crate::gateway::Gateway;
 use crate::proxy::BoxProxy;
-use crate::interface::{ErrorWithDesc, RawsockInterface, RawsockInterfaceSet, IntercepterBuilder};
+use crate::interface::{ErrorWithDesc, RawsockInterface, RawsockInterfaceSet, IntercepterBuilder, BorrowedPacket};
 use crate::client::LanClient;
 use futures::future::join_all;
-use smoltcp::wire::{Ipv4Address, Ipv4Cidr};
+use smoltcp::wire::{Ipv4Address, Ipv4Cidr, EthernetFrame, EthernetProtocol, Ipv4Packet};
+
+fn filter_bad_packet(packet: &[u8]) -> Result<()> {
+    let packet = EthernetFrame::new_checked(packet)?;
+    match packet.ethertype() {
+        EthernetProtocol::Arp => {},
+        EthernetProtocol::Ipv4 => {
+            let packet = Ipv4Packet::new_checked(packet.payload())?;
+            if !packet.dst_addr().is_unicast() {
+                // ignore broadcast?
+                return Err(Error::BadPacket)
+            }
+        },
+        _ => return Err(Error::BadPacket),
+    };
+    
+    Ok(())
+}
 
 pub struct LanPlay {
     gateway: Gateway,
@@ -55,8 +72,8 @@ impl LanPlay {
             .into_iter()
             .map(|interface| {
                 let mut intercepter = IntercepterBuilder::new()
-                    .add(|_packet| {
-                        false
+                    .add(|packet| {
+                        filter_bad_packet(packet).is_err()
                     });
                 if let Some(client) = &client {
                     intercepter = intercepter.add_factory(client.to_intercepter_factory());

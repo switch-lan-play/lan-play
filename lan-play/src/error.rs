@@ -9,6 +9,16 @@ pub enum Error {
     #[error("NoInterface")]
     NoInterface,
     #[error("Timed out")]
-    Timedout(#[from] crate::rt::Elapsed)
+    Timedout(#[from] crate::rt::Elapsed),
+    #[error("Smoltcp error {0:?}")]
+    Smoltcp(smoltcp::Error),
+    #[error("Bad Packet")]
+    BadPacket,
 }
 pub type Result<T> = std::result::Result<T, Error>;
+
+impl From<smoltcp::Error> for Error {
+    fn from(e: smoltcp::Error) -> Self {
+        Error::Smoltcp(e)
+    }
+}
