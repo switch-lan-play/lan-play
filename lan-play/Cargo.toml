@@ -12,7 +12,7 @@ async-channel = "1.1"
 futures = "0.3.5"
 rawsock = { version = "0.3", path = "../rawsock" }
 crossbeam-utils = "0.6"
-env_logger = "0.7"
+env_logger = { version = "0.7", default-features = false, features = [ "termcolor", "atty", "humantime" ] }
 log = "0.4"
 cfg-if = "0.1"
 lazy_static = "1.4.0"
@@ -21,7 +21,7 @@ structopt = "0.3"
 dotenv = "0.15"
 anyhow = "1.0"
 thiserror = "1.0"
-async-socks5 = "0.3.1"
+async-socks5 = { version = "0.3.1", optional = true }
 lru = "0.5"
 drop-abort = "0.1"
 url = "2.1"
@@ -30,10 +30,10 @@ shadowsocks-rust = { version = "1.8.12", optional = true }
 base64 = { version = "0.12.3", optional = true }
 
 [features]
-default = [ "async_std" ]
+default = [ "tokio" ]
 shadowsocks = [ "shadowsocks-rust", "base64" ]
 async_std = [ "async-std" ]
-socks5 = []
+socks5 = [ "async-socks5" ]
 
 [dependencies.smoltcp]
 # version = "0.5.0"
