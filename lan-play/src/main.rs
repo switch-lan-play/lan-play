@@ -27,6 +27,9 @@ use smoltcp::wire::Ipv4Cidr;
 use std::net::Ipv4Addr;
 use url::Url;
 
+#[cfg(feature = "socks5")]
+use proxy::Socks5Proxy;
+
 use structopt::StructOpt;
 
 #[derive(Debug, StructOpt)]

@@ -30,7 +30,7 @@ shadowsocks-rust = { version = "1.8.12", optional = true }
 base64 = { version = "0.12.3", optional = true }
 
 [features]
-default = [ "tokio" ]
+default = [ "tokio", "socks5" ]
 shadowsocks = [ "shadowsocks-rust", "base64" ]
 async_std = [ "async-std" ]
 socks5 = [ "async-socks5" ]

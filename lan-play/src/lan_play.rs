@@ -2,7 +2,7 @@ use crate::error::{Error, Result};
 use crate::future_smoltcp::Net;
 use crate::gateway::Gateway;
 use crate::proxy::BoxProxy;
-use crate::interface::{ErrorWithDesc, RawsockInterface, RawsockInterfaceSet, IntercepterBuilder, BorrowedPacket};
+use crate::interface::{ErrorWithDesc, RawsockInterface, RawsockInterfaceSet, IntercepterBuilder};
 use crate::client::LanClient;
 use futures::future::join_all;
 use smoltcp::wire::{Ipv4Address, Ipv4Cidr, EthernetFrame, EthernetProtocol, Ipv4Packet};
