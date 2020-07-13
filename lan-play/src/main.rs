@@ -141,7 +141,7 @@ async fn run(opt: Opt) -> Result<()> {
     let gateway_ip = opt.gateway_ip.into();
     let proxy = parse_proxy(&opt.proxy);
     let client = match opt.relay {
-        Some(relay) => Some(LanClient::new(relay).await?),
+        Some(relay) => Some(LanClient::new(relay, ipv4cidr).await?),
         None => None,
     };
 
@@ -158,7 +158,7 @@ async fn run(opt: Opt) -> Result<()> {
 async fn ping(relay: &str, times: &Option<u64>) -> Result<()> {
     use crate::rt::{Instant, Duration, timeout, delay_for};
 
-    let client = LanClient::new(relay.to_string()).await?;
+    let client = LanClient::new(relay.to_string(), Ipv4Cidr::new(Ipv4Addr::UNSPECIFIED.into(), 0)).await?;
     let times = times.unwrap_or(4);
 
     for i in 0..times {
