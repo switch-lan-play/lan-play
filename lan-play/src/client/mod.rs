@@ -1,11 +1,11 @@
 mod protocol;
 
-use crate::interface::{IntercepterFactory, IntercepterFn, Packet, BorrowedPacket};
+use crate::interface::{IntercepterFactory, Packet, BorrowedPacket};
 use crate::rt::{Sender, Mutex, UdpSocket, interval, Duration, channel, Receiver};
 use futures::stream::StreamExt;
 use std::sync::{Arc, Mutex as SyncMutex};
 use std::{collections::HashMap, io};
-use protocol::{ForwarderFrame, Builder, Ipv4};
+use protocol::{ForwarderFrame, Parser, Builder, Ipv4};
 use smoltcp::wire::{EthernetFrame, Ipv4Address, Ipv4Packet, Ipv4Cidr};
 use futures::{select, prelude::*};
 
@@ -40,27 +40,48 @@ impl LanClientIntercepter {
             inner.all_sender.lock().unwrap().push(sender.clone());
             let tx = inner.tx.clone();
             Box::new(move |pkt: &BorrowedPacket| {
-                intercepter.process(pkt, tx.clone())
+                intercepter.process(pkt, tx.clone(), sender.clone())
             })
         })
     }
-    fn process(&self, pkt: &BorrowedPacket, tx: Sender<Vec<u8>>) -> bool {
-        fn process(cidr: Ipv4Cidr, pkt: &BorrowedPacket, tx: Sender<Vec<u8>>) -> crate::Result<()> {
+    fn process(&self, pkt: &BorrowedPacket, tx: Sender<Vec<u8>>, sender: Sender<Packet>) -> bool {
+        let process = || -> crate::Result<()> {
             let packet = EthernetFrame::new_checked(pkt as &[u8])?;
             let packet = Ipv4Packet::new_checked(packet.payload())?;
-            if cidr.contains_addr(&packet.src_addr()) && cidr.contains_addr(&packet.dst_addr()) {
-                let packet = ForwarderFrame::Ipv4(Ipv4::new(&pkt));
-                let packet = packet.build();
-                tx.try_send(packet).unwrap();
+            if self.cidr.contains_addr(&packet.src_addr()) && self.cidr.contains_addr(&packet.dst_addr()) {
+                self.inner.map_sender.lock().unwrap().insert(packet.src_addr(), sender);
+                tx.try_send(pkt.to_vec()).unwrap();
                 return Err(crate::error::Error::BadPacket);
             }
             Ok(())
-        }
-        process(self.cidr, pkt, tx).is_err()
+        };
+        process().is_err()
     }
 }
 
 impl LanClient {
+    async fn on_interval(socket: &mut UdpSocket) {
+        let keepalive = ForwarderFrame::Keepalive;
+        socket.send(&keepalive.build()).await.unwrap();
+    }
+    async fn on_ipv4(socket: &mut UdpSocket, pkt: &[u8]) {
+        let packet = ForwarderFrame::Ipv4(Ipv4::new(pkt));
+        let packet = packet.build();
+        socket.send(&packet).await.unwrap();
+    }
+    async fn on_recv(inner: Arc<Inner>, buf: &[u8]) {
+        if let Ok(p) = ForwarderFrame::parse(buf) {
+            match p {
+                ForwarderFrame::Ipv4(pkt) => {
+                    let all_sender = inner.all_sender.lock().unwrap();
+                    for i in all_sender.iter() {
+                        i.try_send(pkt.payload().to_owned()).unwrap();
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
     async fn process(inner: Arc<Inner>, rx: Receiver<Vec<u8>>) {
         let mut interval = interval(Duration::from_secs(30));
         let mut socket = inner.socket.lock().await;
@@ -68,13 +89,12 @@ impl LanClient {
             let mut buf = [0u8; 2048];
             select! {
                 _ = interval.next().fuse() => {
-                    let keepalive = ForwarderFrame::Keepalive;
-                    socket.send(&keepalive.build()).await.unwrap();
+                    LanClient::on_interval(&mut socket).await;
                 }
                 pkt = rx.recv().fuse() => {
                     match pkt {
                         Ok(pkt) => {
-                            socket.send(&pkt).await.unwrap();
+                            LanClient::on_ipv4(&mut socket, &pkt).await;
                         }
                         Err(e) => {
                             log::error!("lan client process err {:?}", e);
@@ -82,8 +102,17 @@ impl LanClient {
                         }
                     }
                 }
-                a = socket.recv(&mut buf).fuse() => {
-                    
+                r = socket.recv(&mut buf).fuse() => {
+                    match r {
+                        Ok(size) => {
+                            let buf = &buf[..size];
+                            LanClient::on_recv(inner.clone(), buf).await;
+                        },
+                        Err(e) => {
+                            log::error!("socket recv {:?}", e);
+                            break
+                        }
+                    }
                 }
             }
         }

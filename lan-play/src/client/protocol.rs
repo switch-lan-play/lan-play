@@ -109,6 +109,9 @@ impl<'a> Ipv4<'a> {
             payload
         }
     }
+    pub fn payload(&self) -> &[u8] {
+        self.payload
+    }
 }
 
 impl<'a> Parser<'a> for Ipv4<'a> {
