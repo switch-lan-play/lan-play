@@ -27,6 +27,7 @@ pub struct LanClient {
 
 struct LanClientIntercepter {
     inner: Arc<Inner>,
+    sender: Sender<Packet>,
     cidr: Ipv4Cidr,
 }
 
@@ -35,22 +36,22 @@ impl LanClientIntercepter {
         Box::new(move |sender: Sender<Packet>| {
             let intercepter = LanClientIntercepter {
                 inner: inner.clone(),
+                sender: sender.clone(),
                 cidr,
             };
             inner.all_sender.lock().unwrap().push(sender.clone());
-            let tx = inner.tx.clone();
             Box::new(move |pkt: &BorrowedPacket| {
-                intercepter.process(pkt, tx.clone(), sender.clone())
+                intercepter.process(pkt)
             })
         })
     }
-    fn process(&self, pkt: &BorrowedPacket, tx: Sender<Vec<u8>>, sender: Sender<Packet>) -> bool {
+    fn process(&self, pkt: &BorrowedPacket) -> bool {
         let process = || -> crate::Result<()> {
             let packet = EthernetFrame::new_checked(pkt as &[u8])?;
             let packet = Ipv4Packet::new_checked(packet.payload())?;
             if self.cidr.contains_addr(&packet.src_addr()) && self.cidr.contains_addr(&packet.dst_addr()) {
-                self.inner.map_sender.lock().unwrap().insert(packet.src_addr(), sender);
-                tx.try_send(pkt.to_vec()).unwrap();
+                self.inner.map_sender.lock().unwrap().insert(packet.src_addr(), self.sender.clone());
+                self.inner.tx.try_send(pkt.to_vec()).unwrap();
                 return Err(crate::error::Error::BadPacket);
             }
             Ok(())
