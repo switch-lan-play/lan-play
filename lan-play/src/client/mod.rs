@@ -6,7 +6,7 @@ use futures::stream::StreamExt;
 use std::sync::{Arc, Mutex as SyncMutex};
 use std::{collections::HashMap, io};
 use protocol::{ForwarderFrame, Parser, Builder, Ipv4};
-use smoltcp::wire::{EthernetFrame, Ipv4Address, Ipv4Packet, Ipv4Cidr};
+use smoltcp::wire::{EthernetFrame, Ipv4Address, Ipv4Packet, Ipv4Cidr, EthernetProtocol};
 use futures::{select, prelude::*};
 
 #[derive(Debug)]
@@ -48,6 +48,9 @@ impl LanClientIntercepter {
     fn process(&self, pkt: &BorrowedPacket) -> bool {
         let process = || -> crate::Result<()> {
             let packet = EthernetFrame::new_checked(pkt as &[u8])?;
+            if packet.ethertype() != EthernetProtocol::Ipv4 {
+                return Ok(())
+            }
             let packet = Ipv4Packet::new_checked(packet.payload())?;
             if self.cidr.contains_addr(&packet.src_addr()) && self.cidr.contains_addr(&packet.dst_addr()) {
                 self.inner.map_sender.lock().unwrap().insert(packet.src_addr(), self.sender.clone());

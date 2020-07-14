@@ -86,15 +86,14 @@ impl<'a> Parser<'a> for ForwarderFrame<'a> {
 
 impl<'a> Builder for ForwarderFrame<'a> {
     fn build(self) -> Vec<u8> {
-        let r = match self {
-            ForwarderFrame::Keepalive => [forwarder_type::KEEPALIVE],
-            ForwarderFrame::Ipv4(_ipv4) => [forwarder_type::IPV4],
-            ForwarderFrame::Ping(_ping) => [forwarder_type::PING],
-            ForwarderFrame::Ipv4Frag(_ipv4) => [forwarder_type::IPV4_FRAG],
-            ForwarderFrame::AuthMe => [forwarder_type::AUTH_ME],
-            ForwarderFrame::Info => [forwarder_type::INFO],
-        };
-        Vec::from(r)
+        match self {
+            ForwarderFrame::Keepalive => [forwarder_type::KEEPALIVE].into(),
+            ForwarderFrame::Ipv4(ipv4) => [&[forwarder_type::IPV4][..], ipv4.payload()].concat(),
+            ForwarderFrame::Ping(ping) => [&[forwarder_type::PING][..], ping.payload()].concat(),
+            ForwarderFrame::Ipv4Frag(_ipv4) => [forwarder_type::IPV4_FRAG].into(),
+            ForwarderFrame::AuthMe => [forwarder_type::AUTH_ME].into(),
+            ForwarderFrame::Info => [forwarder_type::INFO].into(),
+        }
     }
 }
 
@@ -124,6 +123,17 @@ impl<'a> Parser<'a> for Ipv4<'a> {
 #[derive(Debug)]
 pub struct Ping<'a> {
     payload: &'a [u8],
+}
+
+impl<'a> Ping<'a> {
+    pub fn new(payload: &'a [u8]) -> Ipv4<'a> {
+        Ipv4 {
+            payload
+        }
+    }
+    pub fn payload(&self) -> &[u8] {
+        self.payload
+    }
 }
 
 impl<'a> Parser<'a> for Ping<'a> {
