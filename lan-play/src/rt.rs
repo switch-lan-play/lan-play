@@ -2,7 +2,7 @@
 pub use tokio::{
     task::{spawn, JoinHandle},
     select,
-    time::{Elapsed, Instant, Duration, timeout, delay_for, interval},
+    time::{Elapsed, Instant, Duration, timeout, delay_for, Delay, interval},
     io::{AsyncRead, AsyncWrite, BufWriter, split, copy},
     sync::{Mutex, Notify},
     prelude,

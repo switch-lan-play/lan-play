@@ -16,6 +16,7 @@ mod lan_play;
 mod proxy;
 mod interface;
 mod rt;
+mod timeout_stream;
 
 use client::LanClient;
 use error::Result;

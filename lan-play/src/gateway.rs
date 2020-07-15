@@ -1,12 +1,16 @@
 use crate::future_smoltcp::{OwnedUdp, TcpListener, TcpSocket, UdpSocket};
 use crate::proxy::{other, BoxProxy, SendHalf, RecvHalf};
-use crate::rt::{Mutex, copy, Sender, channel, split};
+use crate::rt::{Mutex, copy, Sender, channel, split, Instant};
 use drop_abort::{abortable, DropAbortHandle};
 use lru::LruCache;
 use std::io;
 use std::net::SocketAddr;
 use std::sync::Arc;
+use std::time::Duration;
 use futures::{select, future::FutureExt};
+use crate::timeout_stream::TimeoutStream;
+
+const TCP_TIMEOUT: Duration = Duration::from_secs(10);
 
 struct Inner {
     udp_cache: LruCache<SocketAddr, UdpConnection>,
@@ -85,16 +89,20 @@ impl TcpConnection {
 
         crate::rt::spawn(async move {
             let (local_addr, peer_addr) = (stcp.local_addr(), stcp.peer_addr());
-            let ptcp = proxy.new_tcp(stcp.local_addr()?).await?;
+            let ptcp = TimeoutStream::new(
+                proxy.new_tcp(stcp.local_addr()?).await?,
+                TCP_TIMEOUT,
+            );
             let (mut s_read, mut s_write) = split(stcp);
             let (mut p_read, mut p_write) = split(ptcp);
+            let start = Instant::now();
 
             let r = futures::try_join!(
                 copy(&mut s_read, &mut p_write),
                 copy(&mut p_read, &mut s_write),
             );
 
-            log::trace!("tcp done {:?} -> {:?} ({:?})", peer_addr, local_addr, r);
+            log::trace!("tcp done {:?} -> {:?} ({:?}) {:?}", peer_addr, local_addr, r, start.elapsed());
 
             Ok::<(), io::Error>(())
         });

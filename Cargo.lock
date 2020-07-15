@@ -908,6 +908,7 @@ dependencies = [
  "log 0.4.8 (registry+https://github.com/rust-lang/crates.io-index)",
  "lru 0.5.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "nix 0.15.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "pin-project-lite 0.1.7 (registry+https://github.com/rust-lang/crates.io-index)",
  "rawsock 0.3.0",
  "shadowsocks-rust 1.8.12 (registry+https://github.com/rust-lang/crates.io-index)",
  "smoltcp 0.6.0 (git+https://github.com/switch-lan-play/smoltcp.git?branch=accept-all-0.6.0)",

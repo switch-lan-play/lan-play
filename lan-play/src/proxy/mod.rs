@@ -98,7 +98,7 @@ pub async fn resolve(proxy: &BoxProxy, dns_server: SocketAddr, domain: &str) -> 
     let p = builder.build()
         .map_err(|_| io_other("Failed to build dns query"))?;
     
-    let mut buf = vec![0u8; 65536];
+    let mut buf = vec![0u8; 8192];
     let mut udp = proxy.new_udp("0.0.0.0:0".parse().unwrap()).await?;
     udp.send_to(&p, dns_server).await?;
     let (size, _addr) = udp.recv_from(&mut buf).await?;
@@ -171,7 +171,7 @@ mod test {
     async fn test_direct_proxy_udp() -> io::Result<()> {
         let (mut server, target) = server_udp().await;
         let join = spawn(async move {
-            let mut buf = [0u8; 65536];
+            let mut buf = [0u8; 8192];
             let (size, addr) = server.recv_from(&mut buf).await?;
             server.send_to(&buf[..size], addr).await?;
             Ok::<_, io::Error>(())
@@ -179,7 +179,7 @@ mod test {
         let proxy: BoxProxy = DirectProxy::new();
         let mut udp = proxy.new_udp(*ANY_ADDR).await.unwrap();
 
-        let mut buf = [0u8; 65536];
+        let mut buf = [0u8; 8192];
         udp.send_to(b"hello", target).await?;
         let (size, addr) = udp.recv_from(&mut buf).await?;
         assert_eq!(addr, target);

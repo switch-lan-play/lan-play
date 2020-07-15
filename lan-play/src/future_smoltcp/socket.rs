@@ -202,6 +202,7 @@ impl Drop for TcpSocket {
         self.reactor.remove(&self.handle);
         let mut set = self.reactor.lock_set();
         set.remove(self.handle);
+        log::trace!("Drop TcpSocket {:?}", self.handle);
     }
 }
 
