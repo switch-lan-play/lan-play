@@ -2,18 +2,14 @@ use crate::rt::{AsyncRead, AsyncWrite, Duration, Instant, io, Delay, delay_for};
 use std::task::{Context, Poll};
 use std::pin::Pin;
 use std::future::Future;
-use pin_project_lite::pin_project;
 use futures::ready;
 
-pin_project! {
-    pub struct TimeoutStream<S>
-    {
-        #[pin]
-        s: S,
-        last_visit: Instant,
-        timeout: Duration,
-        timer: Delay,
-    }
+pub struct TimeoutStream<S>
+{
+    s: S,
+    last_visit: Instant,
+    timeout: Duration,
+    timer: Delay,
 }
 
 impl<S> TimeoutStream<S>
@@ -36,7 +32,6 @@ impl<S> TimeoutStream<S>
         loop {
             ready!(Pin::new(&mut self.timer).poll(cx));
             let elapsed = self.last_visit.elapsed();
-            log::trace!("e {:?}", elapsed);
             if elapsed > self.timeout {
                 return Poll::Ready(self.timeout())
             } else {
@@ -55,7 +50,7 @@ where
         cx: &mut Context<'_>,
         buf: &mut [u8],
     ) -> Poll<io::Result<usize>> {
-        match self.as_mut().project().s.poll_read(cx, buf) {
+        match Pin::new(&mut self.s).poll_read(cx, buf) {
             Poll::Ready(r) => {
                 self.last_visit = Instant::now();
                 Poll::Ready(r)
@@ -77,7 +72,7 @@ where
         cx: &mut Context<'_>,
         buf: &[u8],
     ) -> Poll<Result<usize, io::Error>> {
-        match self.as_mut().project().s.poll_write(cx, buf) {
+        match Pin::new(&mut self.s).poll_write(cx, buf) {
             Poll::Ready(r) => {
                 self.last_visit = Instant::now();
                 Poll::Ready(r)
@@ -88,12 +83,10 @@ where
             }
         }
     }
-    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
-        let this = self.project();
-        this.s.poll_flush(cx)
+    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
+        Pin::new(&mut self.s).poll_flush(cx)
     }
-    fn poll_shutdown(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
-        let this = self.project();
-        this.s.poll_shutdown(cx)
+    fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
+        Pin::new(&mut self.s).poll_shutdown(cx)
     }
 }
