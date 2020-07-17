@@ -159,7 +159,6 @@ impl TcpSocket {
                 let mut set = self.reactor.lock_set();
                 let mut socket = set.as_set_mut().get::<socket::TcpSocket>(self.handle);
                 if socket.state() != TcpState::Established {
-                    log::trace!("recv closed");
                     socket.close();
                     return Ok(0)
                 }
@@ -209,7 +208,6 @@ impl Drop for TcpSocket {
         self.reactor.remove(&self.handle);
         let mut set = self.reactor.lock_set();
         set.remove(self.handle);
-        log::trace!("Drop TcpSocket {:?}", self.handle);
     }
 }
 
