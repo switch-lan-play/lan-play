@@ -4,6 +4,7 @@ use std::pin::Pin;
 use std::future::Future;
 use futures::ready;
 
+#[derive(Debug)]
 pub struct TimeoutStream<S>
 {
     s: S,

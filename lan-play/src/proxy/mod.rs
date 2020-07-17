@@ -1,3 +1,4 @@
+use crate::rt::{timeout, Duration};
 pub use self::direct::DirectProxy;
 pub use std::io;
 pub use std::net::{IpAddr, Ipv4Addr, SocketAddr};
@@ -17,6 +18,7 @@ pub type BoxProxy = Box<dyn Proxy + Unpin + Sync + Send>;
 lazy_static! {
     pub static ref ANY_ADDR: SocketAddr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 0);
 }
+const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 
 pub mod socket {
     use std::{net::SocketAddr, sync::{Arc, Mutex as SyncMutex}};
@@ -84,6 +86,14 @@ pub mod socket {
 pub trait Proxy {
     async fn new_tcp(&self, addr: SocketAddr) -> io::Result<BoxTcp>;
     async fn new_udp(&self, addr: SocketAddr) -> io::Result<BoxUdp>;
+}
+
+pub async fn new_tcp_timeout(proxy: &BoxProxy, addr: SocketAddr) -> io::Result<BoxTcp> {
+    Ok(timeout(CONNECT_TIMEOUT, proxy.new_tcp(addr)).await??)
+}
+
+pub async fn new_udp_timeout(proxy: &BoxProxy, addr: SocketAddr) -> io::Result<BoxUdp> {
+    Ok(timeout(CONNECT_TIMEOUT, proxy.new_udp(addr)).await??)
 }
 
 fn io_other(s: &str) -> io::Error {

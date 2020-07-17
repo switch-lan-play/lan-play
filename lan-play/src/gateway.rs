@@ -1,5 +1,5 @@
 use crate::future_smoltcp::{OwnedUdp, TcpListener, TcpSocket, UdpSocket};
-use crate::proxy::{other, BoxProxy, SendHalf, RecvHalf};
+use crate::proxy::{other, BoxProxy, SendHalf, RecvHalf, new_tcp_timeout, new_udp_timeout};
 use crate::rt::{Mutex, copy, Sender, channel, split, Instant};
 use drop_abort::{abortable, DropAbortHandle};
 use lru::LruCache;
@@ -90,17 +90,17 @@ impl TcpConnection {
         crate::rt::spawn(async move {
             let (local_addr, peer_addr) = (stcp.local_addr(), stcp.peer_addr());
             let ptcp = TimeoutStream::new(
-                proxy.new_tcp(stcp.local_addr()?).await?,
+                new_tcp_timeout(&proxy, stcp.local_addr()?).await?,
                 TCP_TIMEOUT,
             );
             let (mut s_read, mut s_write) = split(stcp);
             let (mut p_read, mut p_write) = split(ptcp);
             let start = Instant::now();
 
-            let r = futures::try_join!(
+            let (r, _) = futures::future::select(
                 copy(&mut s_read, &mut p_write),
                 copy(&mut p_read, &mut s_write),
-            );
+            ).await.factor_first();
 
             log::trace!("tcp done {:?} -> {:?} ({:?}) {:?}", peer_addr, local_addr, r, start.elapsed());
 
@@ -148,7 +148,7 @@ impl UdpConnection {
         src: SocketAddr,
     ) -> io::Result<UdpConnection> {
         let proxy = proxy.clone();
-        let (tx, rx) = proxy.new_udp("0.0.0.0:0".parse().unwrap()).await?.split();
+        let (tx, rx) = new_udp_timeout(&proxy, "0.0.0.0:0".parse().unwrap()).await?.split();
         let (fut, _handle) = abortable(UdpConnection::run(rx, sender, src));
         crate::rt::spawn(fut);
         Ok(UdpConnection {

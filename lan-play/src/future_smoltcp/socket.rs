@@ -3,7 +3,7 @@ use super::{
     reactor::Source,
     NetReactor,
 };
-pub use smoltcp::socket::{self, SocketHandle, SocketRef};
+pub use smoltcp::socket::{self, SocketHandle, SocketRef, TcpState};
 
 use std::{
     pin::Pin,
@@ -158,8 +158,10 @@ impl TcpSocket {
             {
                 let mut set = self.reactor.lock_set();
                 let mut socket = set.as_set_mut().get::<socket::TcpSocket>(self.handle);
-                if !socket.is_open() {
-                    return Ok(0);
+                if socket.state() != TcpState::Established {
+                    log::trace!("recv closed");
+                    socket.close();
+                    return Ok(0)
                 }
                 if socket.can_recv() {
                     return socket
@@ -177,6 +179,11 @@ impl TcpSocket {
                 let mut socket = set
                     .as_set_mut()
                     .get::<smoltcp::socket::TcpSocket>(self.handle);
+                if socket.state() != TcpState::Established {
+                    socket.close();
+                    log::trace!("send closed");
+                    return Ok(0)
+                }
                 if socket.can_send() {
                     let r = socket.send_slice(data)
                         .map_err(map_err);
@@ -230,7 +237,9 @@ impl AsyncRead for TcpSocket {
     ) -> Poll<io::Result<usize>> {
         let fut = self.recv(buf);
         futures::pin_mut!(fut);
-        fut.poll(cx)
+        let r = fut.poll(cx);
+        log::trace!("poll read {:?}", r);
+        r
     }
 }
 
