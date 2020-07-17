@@ -237,9 +237,7 @@ impl AsyncRead for TcpSocket {
     ) -> Poll<io::Result<usize>> {
         let fut = self.recv(buf);
         futures::pin_mut!(fut);
-        let r = fut.poll(cx);
-        log::trace!("poll read {:?}", r);
-        r
+        fut.poll(cx)
     }
 }
 

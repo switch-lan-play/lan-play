@@ -10,7 +10,7 @@ use std::time::Duration;
 use futures::{select, future::FutureExt};
 use crate::timeout_stream::TimeoutStream;
 
-const TCP_TIMEOUT: Duration = Duration::from_secs(10);
+const TCP_TIMEOUT: Duration = Duration::from_secs(60);
 
 struct Inner {
     udp_cache: LruCache<SocketAddr, UdpConnection>,
