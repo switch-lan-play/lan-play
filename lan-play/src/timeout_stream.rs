@@ -27,7 +27,7 @@ impl<S> TimeoutStream<S>
         }
     }
     fn timeout(&self) -> io::Result<()> {
-        Err(io::Error::new(io::ErrorKind::TimedOut, "Timedout"))
+        Err(io::ErrorKind::TimedOut.into())
     }
     fn poll_timeout(&mut self, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         loop {
