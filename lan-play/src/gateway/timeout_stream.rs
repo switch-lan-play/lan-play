@@ -1,16 +1,14 @@
-use crate::rt::{AsyncRead, AsyncWrite, Duration, Instant, io, Delay, delay_for};
+use crate::rt::{AsyncRead, AsyncWrite, Duration, io};
 use std::task::{Context, Poll};
 use std::pin::Pin;
-use std::future::Future;
 use futures::ready;
+use async_timeout::Timeout;
 
 #[derive(Debug)]
 pub struct TimeoutStream<S>
 {
     s: S,
-    last_visit: Instant,
-    timeout: Duration,
-    timer: Delay,
+    timeout: Timeout,
 }
 
 impl<S> TimeoutStream<S>
@@ -21,23 +19,7 @@ impl<S> TimeoutStream<S>
     {
         TimeoutStream {
             s,
-            last_visit: Instant::now(),
-            timeout,
-            timer: delay_for(timeout),
-        }
-    }
-    fn timeout(&self) -> io::Result<()> {
-        Err(io::ErrorKind::TimedOut.into())
-    }
-    fn poll_timeout(&mut self, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        loop {
-            ready!(Pin::new(&mut self.timer).poll(cx));
-            let elapsed = self.last_visit.elapsed();
-            if elapsed > self.timeout {
-                return Poll::Ready(self.timeout())
-            } else {
-                self.timer = delay_for(self.timeout - elapsed);
-            }
+            timeout: Timeout::new(timeout),
         }
     }
 }
@@ -53,11 +35,11 @@ where
     ) -> Poll<io::Result<usize>> {
         match Pin::new(&mut self.s).poll_read(cx, buf) {
             Poll::Ready(r) => {
-                self.last_visit = Instant::now();
+                self.timeout.visit();
                 Poll::Ready(r)
             }
             Poll::Pending => {
-                ready!(self.poll_timeout(cx))?;
+                ready!(self.timeout.poll_timeout(cx))?;
                 unreachable!()
             }
         }
@@ -75,11 +57,11 @@ where
     ) -> Poll<Result<usize, io::Error>> {
         match Pin::new(&mut self.s).poll_write(cx, buf) {
             Poll::Ready(r) => {
-                self.last_visit = Instant::now();
+                self.timeout.visit();
                 Poll::Ready(r)
             }
             Poll::Pending => {
-                ready!(self.poll_timeout(cx))?;
+                ready!(self.timeout.poll_timeout(cx))?;
                 unreachable!()
             }
         }

@@ -26,6 +26,7 @@ url = "2.1"
 dns-parser = "0.8"
 shadowsocks-rust = { version = "1.8.12", optional = true }
 base64 = { version = "0.12.3", optional = true }
+async-timeout = "0.1"
 
 [features]
 default = [ "tokio", "socks5" ]

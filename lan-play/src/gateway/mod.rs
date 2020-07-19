@@ -9,7 +9,7 @@ use std::io;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
-use futures::{select, future::FutureExt};
+use futures::{select, try_join, future::FutureExt};
 use timeout_stream::TimeoutStream;
 use udp::UdpConnection;
 
@@ -33,36 +33,41 @@ impl Gateway {
             }),
         }
     }
-    pub async fn process(&self, mut tcp: TcpListener, mut udp: UdpSocket) -> io::Result<()> {
+    async fn process_udp(&self, mut udp: UdpSocket) -> io::Result<()> {
         let (udp_tx, udp_rx) = channel();
         loop {
             select! {
                 result = udp.recv().fuse() => {
-                    if let Ok(udp) = result {
-                        if let Err(e) = self.on_udp(udp, udp_tx.clone()).await {
-                            log::error!("on_udp {:?}", e);
-                        }
+                    let udp = result?;
+                    if let Err(e) = self.on_udp(udp, udp_tx.clone()).await {
+                        log::error!("on_udp {:?}", e);
                     }
                 }
                 p = udp_rx.recv().fuse() => {
-                    // TODO handle error
                     if let Ok(p) = p {
                         if let Err(e) = udp.send(p).await {
                             log::error!("udp.send {:?}", e);
                         }
+                    } else {
+                        todo!("handle error");
                     }
                 }
-                result = tcp.accept().fuse() => {
-                    if let Ok(tcp) = result {
-                        let (local_addr, peer_addr) = (tcp.local_addr(), tcp.peer_addr());
-                        if let Err(e) = self.on_tcp(tcp).await {
-                            log::error!("on_tcp {:?}", e);
-                        }
-                        log::trace!("new tcp  {:?} -> {:?}", peer_addr, local_addr);
-                    }
-                }
-            };
+            }
         }
+    }
+    async fn process_tcp(&self, mut listener: TcpListener) -> io::Result<()> {
+        loop {
+            let tcp = listener.accept().await?;
+            let (local_addr, peer_addr) = (tcp.local_addr(), tcp.peer_addr());
+            if let Err(e) = self.on_tcp(tcp).await {
+                log::error!("on_tcp {:?}", e);
+            }
+            log::trace!("new tcp  {:?} -> {:?}", peer_addr, local_addr);
+        }
+    }
+    pub async fn process(&self, tcp: TcpListener, udp: UdpSocket) -> io::Result<()> {
+        try_join!(self.process_tcp(tcp), self.process_udp(udp))?;
+        Ok(())
     }
     async fn on_udp(&self, udp: OwnedUdp, sender: Sender<OwnedUdp>) -> io::Result<()> {
         let mut inner = self.inner.lock().await;
