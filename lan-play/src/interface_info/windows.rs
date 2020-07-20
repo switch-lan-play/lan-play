@@ -43,6 +43,8 @@ pub fn get_interface_info(name: &str) -> Result<InterfaceInfo, Error> {
             ) == ERROR_INSUFFICIENT_BUFFER
             {
                 table = mem::transmute(libc::malloc(size as libc::size_t));
+            } else {
+                return Err(Error::NotFound);
             }
 
             if GetIfTable(table, &mut size as *mut libc::c_ulong, false) == NO_ERROR {
@@ -75,7 +77,6 @@ pub fn get_interface_info(name: &str) -> Result<InterfaceInfo, Error> {
             }
             libc::free(mem::transmute(table));
         }
-        return Err(Error::NotFound);
     }
     Err(Error::NotFound)
 }
