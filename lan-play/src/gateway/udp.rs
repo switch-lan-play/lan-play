@@ -1,10 +1,59 @@
-use crate::future_smoltcp::OwnedUdp;
+use crate::future_smoltcp::{OwnedUdp, UdpSocket};
 use crate::proxy::{other, BoxProxy, SendHalf, RecvHalf, new_udp_timeout};
-use crate::rt::Sender;
+use crate::rt::{Sender, channel, Mutex};
 use drop_abort::{abortable, DropAbortHandle};
 use std::io;
 use std::net::SocketAddr;
 use std::sync::Arc;
+use futures::{select, future::FutureExt};
+use lru::LruCache;
+
+pub(super) struct UdpGateway {
+    proxy: Arc<BoxProxy>,
+    cache: Mutex<LruCache<SocketAddr, UdpConnection>>,
+}
+
+impl UdpGateway {
+    pub fn new(proxy: Arc<BoxProxy>) -> UdpGateway {
+        UdpGateway {
+            proxy,
+            cache: Mutex::new(LruCache::new(100))
+        }
+    }
+    pub async fn process(&self, mut udp: UdpSocket) -> io::Result<()> {
+        let (udp_tx, udp_rx) = channel();
+        loop {
+            select! {
+                result = udp.recv().fuse() => {
+                    let udp = result?;
+                    if let Err(e) = self.on_udp(udp, udp_tx.clone()).await {
+                        log::error!("on_udp {:?}", e);
+                    }
+                }
+                p = udp_rx.recv().fuse() => {
+                    if let Ok(p) = p {
+                        if let Err(e) = udp.send(p).await {
+                            log::error!("udp.send {:?}", e);
+                        }
+                    } else {
+                        todo!("handle error");
+                    }
+                }
+            }
+        }
+    }
+    async fn on_udp(&self, udp: OwnedUdp, sender: Sender<OwnedUdp>) -> io::Result<()> {
+        let mut cache = self.cache.lock().await;
+        let src = udp.src();
+        if !cache.contains(&src) {
+            cache.put(src, UdpConnection::new(&self.proxy, sender, src).await?);
+            log::trace!("new udp from {:?}", src);
+        }
+        let connection = cache.get_mut(&src).unwrap();
+        connection.send_to(&udp.data, udp.dst()).await?;
+        Ok(())
+    }
+}
 
 pub(super) struct UdpConnection {
     sender: SendHalf,
