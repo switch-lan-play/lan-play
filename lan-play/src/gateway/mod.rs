@@ -3,7 +3,7 @@ mod udp;
 
 use crate::future_smoltcp::{OwnedUdp, TcpListener, TcpSocket, UdpSocket};
 use crate::proxy::{BoxProxy, new_tcp_timeout};
-use crate::rt::{Mutex, copy, Sender, channel, split, Instant};
+use crate::rt::{Mutex, copy, Sender, channel, split, Instant, prelude::*};
 use lru::LruCache;
 use std::io;
 use std::net::SocketAddr;
@@ -105,12 +105,20 @@ impl TcpConnection {
             let (mut p_read, mut p_write) = split(ptcp);
             let start = Instant::now();
 
-            let (r, _) = futures::future::select(
-                copy(&mut s_read, &mut p_write),
-                copy(&mut p_read, &mut s_write),
-            ).await.factor_first();
+            let r = futures::future::try_join(
+                async {
+                    let r = copy(&mut s_read, &mut p_write).await;
+                    p_write.shutdown().await?;
+                    r
+                },
+                async {
+                    let r = copy(&mut p_read, &mut s_write).await;
+                    s_write.shutdown().await?;
+                    r
+                },
+            ).await;
 
-            log::trace!("tcp done {:?} -> {:?} ({:?}) {:?}", peer_addr, local_addr, r, start.elapsed());
+            log::trace!("tcp done {:?} -> {:?} {:?} {:?}", peer_addr, local_addr, r, start.elapsed());
 
             Ok::<(), io::Error>(())
         });
