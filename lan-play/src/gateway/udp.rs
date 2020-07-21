@@ -1,27 +1,36 @@
 use crate::future_smoltcp::{OwnedUdp, UdpSocket};
 use crate::proxy::{other, BoxProxy, SendHalf, RecvHalf, new_udp_timeout};
-use crate::rt::{Sender, channel, Mutex};
+use crate::rt::{spawn, Sender, Receiver, channel, Mutex, Duration};
 use drop_abort::{abortable, DropAbortHandle};
 use std::io;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use futures::{select, future::FutureExt};
 use lru::LruCache;
+use async_timeout::{VisitorTimeout, Visitor};
+
+const UDP_TIMEOUT: Duration = Duration::from_secs(60);
 
 pub(super) struct UdpGateway {
     proxy: Arc<BoxProxy>,
     cache: Mutex<LruCache<SocketAddr, UdpConnection>>,
+    pop_tx: Sender<SocketAddr>,
+    pop_rx: Option<Receiver<SocketAddr>>,
 }
 
 impl UdpGateway {
     pub fn new(proxy: Arc<BoxProxy>) -> UdpGateway {
+        let (pop_tx, pop_rx) = channel();
         UdpGateway {
             proxy,
-            cache: Mutex::new(LruCache::new(100))
+            cache: Mutex::new(LruCache::new(100)),
+            pop_tx,
+            pop_rx: Some(pop_rx),
         }
     }
-    pub async fn process(&self, mut udp: UdpSocket) -> io::Result<()> {
+    pub async fn process(&mut self, mut udp: UdpSocket) -> io::Result<()> {
         let (udp_tx, udp_rx) = channel();
+        let pop_rx = self.pop_rx.take().expect("process can't be called twice");
         loop {
             select! {
                 result = udp.recv().fuse() => {
@@ -39,6 +48,14 @@ impl UdpGateway {
                         todo!("handle error");
                     }
                 }
+                key = pop_rx.recv().fuse() => {
+                    if let Ok(key) = key {
+                        let mut cache = self.cache.lock().await;
+                        cache.pop(&key);
+                    } else {
+                        todo!("handle error");
+                    }
+                }
             }
         }
     }
@@ -46,7 +63,14 @@ impl UdpGateway {
         let mut cache = self.cache.lock().await;
         let src = udp.src();
         if !cache.contains(&src) {
-            cache.put(src, UdpConnection::new(&self.proxy, sender, src).await?);
+            let (timeout, visitor) = VisitorTimeout::new(UDP_TIMEOUT);
+            let pop_tx = self.pop_tx.clone();
+            spawn(async move {
+                timeout.await;
+                pop_tx.send(src).await;
+                log::trace!("Udp timeout");
+            });
+            cache.put(src, UdpConnection::new(&self.proxy, sender, src, visitor).await?);
             log::trace!("new udp from {:?}", src);
         }
         let connection = cache.get_mut(&src).unwrap();
@@ -57,6 +81,7 @@ impl UdpGateway {
 
 pub(super) struct UdpConnection {
     sender: SendHalf,
+    visitor: Visitor,
     _handle: DropAbortHandle,
 }
 
@@ -85,17 +110,22 @@ impl UdpConnection {
         proxy: &Arc<BoxProxy>,
         sender: Sender<OwnedUdp>,
         src: SocketAddr,
+        visitor: Visitor,
     ) -> io::Result<UdpConnection> {
         let proxy = proxy.clone();
         let (tx, rx) = new_udp_timeout(&proxy, "0.0.0.0:0".parse().unwrap()).await?.split();
-        let (fut, _handle) = abortable(UdpConnection::run(rx, sender, src));
+        let (fut, _handle) = abortable(
+            UdpConnection::run(rx, sender, src)
+        );
         crate::rt::spawn(fut);
         Ok(UdpConnection {
             sender: tx,
+            visitor,
             _handle
         })
     }
     pub(super) async fn send_to(&mut self, buf: &[u8], addr: SocketAddr) -> io::Result<usize> {
+        self.visitor.visit();
         self.sender.send_to(buf, addr).await
     }
 }
