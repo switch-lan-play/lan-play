@@ -28,7 +28,7 @@ fn from_u16(s: &[u16]) -> Option<String> {
 pub fn get_interface_info(name: &str) -> Result<InterfaceInfo, Error> {
     if let Some(intf_guid) = get_guid(name) {
         let mut size = 0u32;
-        let mut table: *mut MibIftable = ptr::null_mut();
+        let table: *mut MibIftable;
 
         let mut info = InterfaceInfo {
             name: name.to_string(),
