@@ -1,5 +1,5 @@
 pub use rawsock::BorrowedPacket;
-use crate::rt::Sender;
+use async_channel::Sender;
 use super::interface::Packet;
 
 pub type IntercepterFn = Box<dyn Fn(&BorrowedPacket) -> bool + Send + 'static>;

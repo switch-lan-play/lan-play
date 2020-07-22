@@ -1,6 +1,6 @@
 use crate::future_smoltcp::{OwnedUdp, UdpSocket};
 use crate::proxy::{other, BoxProxy, SendHalf, RecvHalf, new_udp_timeout};
-use crate::rt::{spawn, Sender, channel, Mutex, Duration};
+use crate::rt::{spawn, Mutex, Duration};
 use drop_abort::{abortable, DropAbortHandle};
 use std::io;
 use std::net::SocketAddr;
@@ -8,6 +8,7 @@ use std::sync::Arc;
 use futures::{select, future::FutureExt};
 use lru::LruCache;
 use async_timeout::{VisitorTimeout, Visitor};
+use async_channel::{Sender, unbounded};
 
 const UDP_TIMEOUT: Duration = Duration::from_secs(60);
 
@@ -24,8 +25,8 @@ impl UdpGateway {
         }
     }
     pub async fn process(&self, mut udp: UdpSocket) -> io::Result<()> {
-        let (udp_tx, udp_rx) = channel();
-        let (pop_tx, pop_rx) = channel();
+        let (udp_tx, udp_rx) = unbounded();
+        let (pop_tx, pop_rx) = unbounded();
         loop {
             select! {
                 result = udp.recv().fuse() => {

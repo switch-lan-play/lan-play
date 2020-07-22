@@ -1,6 +1,7 @@
 use super::{Error, ErrorWithDesc, intercepter::{IntercepterBuilder, IntercepterFn}};
 use crate::interface_info::{get_interface_info, InterfaceInfo};
-use crate::rt::{spawn, channel, Receiver, Sender, JoinHandle};
+use crate::rt::{spawn, JoinHandle};
+use async_channel::{unbounded, Receiver, Sender};
 use rawsock::traits::{DynamicInterface, Library};
 use rawsock::InterfaceDescription;
 use smoltcp::wire::{EthernetAddress, Ipv4Cidr};
@@ -67,8 +68,8 @@ impl RawsockInterface {
         Receiver<Packet>,
     ) {
         let interface = self.interface;
-        let (packet_sender, stream) = channel();
-        let (sink, packet_receiver) = channel();
+        let (packet_sender, stream) = unbounded();
+        let (sink, packet_receiver) = unbounded();
         let intercepter = intercepter_builder.build(sink.clone());
 
         Self::start_thread(interface.clone(), packet_sender, intercepter);

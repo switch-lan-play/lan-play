@@ -1,13 +1,14 @@
 mod protocol;
 
 use crate::interface::{IntercepterFactory, Packet, BorrowedPacket};
-use crate::rt::{Sender, Mutex, UdpSocket, interval, Duration, channel, Receiver};
+use crate::rt::{Mutex, UdpSocket, interval, Duration};
 use futures::stream::StreamExt;
 use std::sync::{Arc, Mutex as SyncMutex};
 use std::{collections::HashMap, io};
 use protocol::{ForwarderFrame, Parser, Builder, Ipv4};
 use smoltcp::wire::{EthernetFrame, Ipv4Address, Ipv4Packet, Ipv4Cidr, EthernetProtocol};
 use futures::{select, prelude::*};
+use async_channel::{unbounded, Sender, Receiver};
 
 #[derive(Debug)]
 struct Inner {
@@ -124,7 +125,7 @@ impl LanClient {
     pub async fn new(relay_server: String, cidr: Ipv4Cidr) -> io::Result<LanClient> {
         let socket = UdpSocket::bind("0.0.0.0:0").await?;
         socket.connect(&relay_server).await?;
-        let (tx, rx) = channel();
+        let (tx, rx) = unbounded();
         let inner = Arc::new(Inner {
             socket: Mutex::new(socket),
             map_sender: SyncMutex::new(HashMap::new()),

@@ -1,4 +1,4 @@
-use crate::rt::{TryRecvError, Receiver};
+use async_channel::{TryRecvError, Receiver};
 
 pub struct PeekableReceiver<T> {
     temp: Option<T>,

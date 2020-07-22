@@ -61,6 +61,5 @@ mod async_std_exports {
 #[cfg(feature = "async-std")]
 pub use async_std_exports::*;
 
-pub use async_channel::{Sender, Receiver, unbounded as channel, TryRecvError};
-
 pub use std::io;
+pub use futures::channel::oneshot;

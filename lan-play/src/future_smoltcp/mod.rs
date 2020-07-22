@@ -21,7 +21,7 @@ pub use socket::{SocketHandle, TcpListener, TcpSocket, UdpSocket};
 use socketset::SocketSet;
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
-use crate::rt::{Sender, Receiver, TryRecvError};
+use async_channel::{Sender, Receiver, TryRecvError};
 
 type Packet = Vec<u8>;
 pub type Ethernet = SmoltcpEthernetInterface<'static, 'static, 'static, FutureDevice>;
