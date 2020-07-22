@@ -5,7 +5,7 @@ use futures::stream::StreamExt;
 use std::sync::{Arc, Mutex as SyncMutex};
 use std::{collections::HashMap, io};
 use super::protocol::{ForwarderFrame, Parser, Builder, Ipv4};
-use smoltcp::wire::{EthernetFrame, Ipv4Address, Ipv4Packet, Ipv4Cidr, EthernetProtocol};
+use smoltcp::wire::{EthernetFrame, EthernetRepr, Ipv4Address, Ipv4Packet, Ipv4Cidr, EthernetProtocol, EthernetAddress};
 use futures::{select, prelude::*};
 
 #[derive(Debug)]
@@ -13,6 +13,9 @@ struct Inner {
     socket: Mutex<UdpSocket>,
     map_sender: SyncMutex<HashMap<Ipv4Address, Sender<Packet>>>,
     all_sender: SyncMutex<Vec<Sender<Packet>>>,
+    primary_sender: SyncMutex<Option<Sender<Packet>>>,
+    self_addr: SyncMutex<Option<EthernetAddress>>,
+    arp: SyncMutex<HashMap<Ipv4Address, EthernetAddress>>,
     // send by udp to server
     tx: Sender<Vec<u8>>,
 }
@@ -46,12 +49,19 @@ impl LanClientIntercepter {
     }
     fn process(&self, pkt: &BorrowedPacket) -> bool {
         let process = || -> crate::Result<()> {
-            let packet = EthernetFrame::new_checked(pkt as &[u8])?;
-            if packet.ethertype() != EthernetProtocol::Ipv4 {
+            *self.inner.primary_sender.lock().unwrap() = Some(self.sender.clone());
+
+            let eth_packet = EthernetFrame::new_checked(pkt as &[u8])?;
+            if eth_packet.ethertype() != EthernetProtocol::Ipv4 {
                 return Ok(())
             }
-            let packet = Ipv4Packet::new_checked(packet.payload())?;
+
+            *self.inner.self_addr.lock().unwrap() = Some(eth_packet.dst_addr());
+
+            let packet = Ipv4Packet::new_checked(eth_packet.payload())?;
             if self.cidr.contains_addr(&packet.src_addr()) && self.cidr.contains_addr(&packet.dst_addr()) {
+                self.inner.arp.lock().unwrap().insert(packet.src_addr(), eth_packet.src_addr());
+
                 self.inner.map_sender.lock().unwrap().insert(packet.src_addr(), self.sender.clone());
                 self.inner.tx.try_send(pkt.to_vec()).unwrap();
                 return Err(crate::error::Error::BadPacket);
@@ -76,9 +86,25 @@ impl LanClient {
         if let Ok(p) = ForwarderFrame::parse(buf) {
             match p {
                 ForwarderFrame::Ipv4(pkt) => {
-                    let all_sender = inner.all_sender.lock().unwrap();
+                    let payload = pkt.payload();
+                    let ipv4 = Ipv4Packet::new_unchecked(payload);
+                    let src_addr = inner.self_addr.lock().unwrap().unwrap_or(&EthernetAddress::BROADCAST);
+                    let dst_addr = *inner.arp.lock().unwrap().get(&ipv4.dst_addr()).unwrap_or(&EthernetAddress::BROADCAST);
+
+                    let repr = EthernetRepr {
+                        src_addr,
+                        dst_addr,
+                        ethertype: EthernetProtocol::Ipv4,
+                    };
+                    let mut buffer = vec![0u8; payload.len() + repr.buffer_len()];
+                    let mut eth_packet = EthernetFrame::new_unchecked(&mut buffer);
+                    repr.emit(&mut eth_packet);
+                    eth_packet.payload_mut().copy_from_slice(payload);
+                    let buf = eth_packet.into_inner();
+
+                    let all_sender = inner.primary_sender.lock().unwrap();
                     for i in all_sender.iter() {
-                        i.try_send(pkt.payload().to_owned()).unwrap();
+                        i.try_send(buf.to_owned()).unwrap();
                     }
                 }
                 _ => {}
@@ -128,6 +154,9 @@ impl LanClient {
             socket: Mutex::new(socket),
             map_sender: SyncMutex::new(HashMap::new()),
             all_sender: SyncMutex::new(Vec::new()),
+            primary_sender: SyncMutex::new(None),
+            self_addr: SyncMutex::new(None),
+            arp: SyncMutex::new(HashMap::new()),
             tx,
         });
         crate::rt::spawn(Self::process(inner.clone(), rx));
