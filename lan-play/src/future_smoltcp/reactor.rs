@@ -108,7 +108,7 @@ impl NetReactor {
 
             select! {
                 _ = delay_for(deadline.into()).fuse() => {},
-                _ = device.receiver.peek().fuse() => {},
+                _ = device.wait().fuse() => {},
                 _ = self.notify.notified().fuse() => {},
             }
             let mut set = sockets.lock().unwrap();
