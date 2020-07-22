@@ -28,14 +28,16 @@ pub struct LanPlay {
     gateway: Gateway,
     ipv4cidr: Ipv4Cidr,
     gateway_ip: Ipv4Address,
+    mtu: usize,
 }
 
 impl LanPlay {
-    pub fn new(proxy: BoxProxy, ipv4cidr: Ipv4Cidr, gateway_ip: Ipv4Address) -> LanPlay {
+    pub fn new(proxy: BoxProxy, ipv4cidr: Ipv4Cidr, gateway_ip: Ipv4Address, mtu: usize) -> LanPlay {
         LanPlay {
             gateway: Gateway::new(proxy),
             ipv4cidr,
             gateway_ip,
+            mtu,
         }
     }
     pub async fn start(&mut self, set: &RawsockInterfaceSet, netif: Option<String>, client: Option<LanClient>) -> Result<()> {
@@ -94,6 +96,7 @@ impl LanPlay {
             self.gateway_ip,
             interf,
             intercepter,
+            self.mtu,
         );
         let tcp = net.tcp_listener().await;
         let udp = net.udp_socket().await;

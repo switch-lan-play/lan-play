@@ -1,6 +1,3 @@
-
-use super::peekable_receiver::PeekableReceiver;
-
 use async_channel::{Sender, Receiver, TryRecvError};
 use smoltcp::{
     phy::{DeviceCapabilities, RxToken, TxToken},
@@ -11,23 +8,35 @@ type Packet = Vec<u8>;
 
 pub struct FutureDevice {
     caps: DeviceCapabilities,
-    receiver: PeekableReceiver<Packet>,
+    receiver: Receiver<Packet>,
     sender: Sender<Packet>,
+    temp: Option<Packet>,
 }
 
 impl FutureDevice {
-    pub fn new(tx: Sender<Packet>, rx: Receiver<Packet>) -> FutureDevice {
+    pub fn new(tx: Sender<Packet>, rx: Receiver<Packet>, mtu: usize) -> FutureDevice {
         let mut caps = DeviceCapabilities::default();
-        caps.max_transmission_unit = 1536;
+        caps.max_transmission_unit = mtu;
         caps.max_burst_size = Some(1);
         FutureDevice {
             caps,
-            receiver: PeekableReceiver::new(rx),
+            receiver: rx,
             sender: tx,
+            temp: None,
         }
     }
     pub async fn wait(&mut self) {
-        self.receiver.peek().await;
+        self.temp = self.receiver.recv().await.ok();
+    }
+    fn get_next(&mut self) -> Option<Packet> {
+        if let Some(t) = self.temp.take() {
+            return Some(t);
+        }
+        match self.receiver.try_recv() {
+            Ok(p) => Some(p),
+            Err(TryRecvError::Empty) => None,
+            Err(TryRecvError::Closed) => todo!("handle receiver closed"),
+        }
     }
 }
 
@@ -68,11 +77,7 @@ impl<'d> smoltcp::phy::Device<'d> for FutureDevice {
     type TxToken = FutureTxToken;
 
     fn receive(&'d mut self) -> Option<(Self::RxToken, Self::TxToken)> {
-        match self.receiver.try_recv() {
-            Ok(packet) => Some((FutureRxToken(packet), FutureTxToken(self.sender.clone()))),
-            Err(TryRecvError::Empty) => None,
-            Err(TryRecvError::Closed) => todo!("handle receiver closed"),
-        }
+        self.get_next().map(|p| (FutureRxToken(p), FutureTxToken(self.sender.clone())))
     }
     fn transmit(&'d mut self) -> Option<Self::TxToken> {
         Some(FutureTxToken(self.sender.clone()))

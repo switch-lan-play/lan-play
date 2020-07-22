@@ -1,4 +1,3 @@
-mod peekable_receiver;
 mod raw_udp;
 mod reactor;
 mod socket;
@@ -34,11 +33,12 @@ impl Net {
         gateway_ip: Ipv4Address,
         interf: RawsockInterface,
         intercepter: IntercepterBuilder,
+        mtu: usize,
     ) -> Net {
         let (_running, tx, rx) = interf.start(
             intercepter
         );
-        let device = FutureDevice::new(tx, rx);
+        let device = FutureDevice::new(tx, rx, mtu);
         let neighbor_cache = NeighborCache::new(BTreeMap::new());
         let mut routes = Routes::new(BTreeMap::new());
         routes.add_default_ipv4_route(gateway_ip).unwrap();

@@ -56,18 +56,27 @@ struct Opt {
     /// IP Address
     #[structopt(short, long, parse(try_from_str = str::parse), default_value = "10.13.37.2")]
     gateway_ip: Ipv4Addr,
+
+    /// MTU
+    #[structopt(long, default_value = "1400")]
+    mtu: usize,
+
     /// Prefix length
     #[structopt(long, default_value = "16")]
     prefix_len: u8,
+
     /// Network interface
     #[structopt(short = "i", long, env = "LP_NETIF")]
     netif: Option<String>,
+
     /// Proxy setting e.g. socks5://localhost:1080
     #[structopt(short, long, parse(try_from_str = Url::parse), env = "LP_PROXY")]
     proxy: Option<Url>,
+
     /// Relay server e.g. localhost:11451
     #[structopt(short, long, env = "LP_RELAY")]
     relay: Option<String>,
+
     /// Optional subcommand
     #[structopt(subcommand)]
     subcommand: Option<Subcommand>,
@@ -148,7 +157,7 @@ async fn run(opt: Opt) -> Result<()> {
     let set = RawsockInterfaceSet::new(&RAWSOCK_LIB, ipv4cidr)
         .expect("Could not open any packet capturing library");
 
-    let mut lp = LanPlay::new(proxy, ipv4cidr, gateway_ip);
+    let mut lp = LanPlay::new(proxy, ipv4cidr, gateway_ip, opt.mtu);
 
     lp.start(&set, opt.netif, client).await?;
 
