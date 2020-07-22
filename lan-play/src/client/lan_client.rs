@@ -88,7 +88,7 @@ impl LanClient {
                 ForwarderFrame::Ipv4(pkt) => {
                     let payload = pkt.payload();
                     let ipv4 = Ipv4Packet::new_unchecked(payload);
-                    let src_addr = inner.self_addr.lock().unwrap().unwrap_or(&EthernetAddress::BROADCAST);
+                    let src_addr = inner.self_addr.lock().unwrap().unwrap_or(EthernetAddress::BROADCAST);
                     let dst_addr = *inner.arp.lock().unwrap().get(&ipv4.dst_addr()).unwrap_or(&EthernetAddress::BROADCAST);
 
                     let repr = EthernetRepr {
