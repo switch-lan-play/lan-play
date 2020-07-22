@@ -17,13 +17,13 @@ use smoltcp::{
 pub use socket::{SocketHandle, TcpListener, TcpSocket, UdpSocket};
 use socketset::SocketSet;
 use std::collections::BTreeMap;
-use std::sync::{Arc, Mutex};
 use device::FutureDevice;
+use std::sync::Arc;
 
 pub type Ethernet = SmoltcpEthernetInterface<'static, 'static, 'static, FutureDevice>;
 
 pub struct Net {
-    reactor: NetReactor,
+    reactor: Arc<NetReactor>,
 }
 
 impl Net {
@@ -51,8 +51,7 @@ impl Net {
             .routes(routes)
             .finalize();
 
-        let socket_set = Arc::new(Mutex::new(SocketSet::new()));
-        let reactor = NetReactor::new(socket_set);
+        let reactor = NetReactor::new();
         let r = reactor.clone();
         crate::rt::spawn(async move {
             r.run(ethernet).await

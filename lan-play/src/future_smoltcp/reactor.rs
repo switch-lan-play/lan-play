@@ -18,11 +18,10 @@ pub(super) struct Source {
     wakers: Mutex<Wakers>,
 }
 
-#[derive(Clone)]
 pub(super) struct NetReactor {
-    socket_set: Arc<Mutex<SocketSet>>,
-    sources: Arc<Mutex<HashMap<SocketHandle, Arc<Source>>>>,
-    notify: Arc<Notify>,
+    socket_set: Mutex<SocketSet>,
+    sources: Mutex<HashMap<SocketHandle, Arc<Source>>>,
+    notify: Notify,
 }
 
 impl Source {
@@ -67,12 +66,12 @@ impl Source {
 }
 
 impl NetReactor {
-    pub fn new(socket_set: Arc<Mutex<SocketSet>>) -> NetReactor {
-        NetReactor {
-            socket_set,
-            sources: Arc::new(Mutex::new(HashMap::new())),
-            notify: Arc::new(Notify::new()),
-        }
+    pub fn new() -> Arc<NetReactor> {
+        Arc::new(NetReactor {
+            socket_set: Mutex::new(SocketSet::new()),
+            sources: Mutex::new(HashMap::new()),
+            notify: Notify::new(),
+        })
     }
     pub fn lock_set(&self) -> MutexGuard<'_, SocketSet> {
         self.socket_set.lock().unwrap()
@@ -95,7 +94,7 @@ impl NetReactor {
     }
     pub async fn run(&self, mut ethernet: Ethernet) {
         let default_timeout = Duration::from_millis(1000);
-        let sockets = self.socket_set.clone();
+        let sockets = &self.socket_set;
 
         loop {
             let start = Instant::now();

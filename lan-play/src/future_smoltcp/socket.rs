@@ -17,13 +17,13 @@ use crate::rt::{AsyncRead, AsyncWrite, io};
 
 pub struct TcpListener {
     handle: SocketHandle,
-    reactor: NetReactor,
+    reactor: Arc<NetReactor>,
     source: Arc<Source>,
 }
 
 pub struct TcpSocket {
     handle: SocketHandle,
-    reactor: NetReactor,
+    reactor: Arc<NetReactor>,
     source: Arc<Source>,
     local_addr: SocketAddr,
     peer_addr: SocketAddr,
@@ -31,7 +31,7 @@ pub struct TcpSocket {
 
 pub struct UdpSocket {
     handle: SocketHandle,
-    reactor: NetReactor,
+    reactor: Arc<NetReactor>,
     source: Arc<Source>,
 }
 
@@ -48,7 +48,7 @@ fn map_err(e: smoltcp::Error) -> io::Error {
 }
 
 impl TcpListener {
-    pub(super) async fn new(reactor: NetReactor) -> TcpListener {
+    pub(super) async fn new(reactor: Arc<NetReactor>) -> TcpListener {
         let mut set = reactor.lock_set();
         let handle = set.new_tcp_socket();
         drop(set);
@@ -78,7 +78,7 @@ impl TcpListener {
 }
 
 impl UdpSocket {
-    pub(super) async fn new(reactor: NetReactor) -> UdpSocket {
+    pub(super) async fn new(reactor: Arc<NetReactor>) -> UdpSocket {
         let mut set = reactor.lock_set();
         let handle = set.new_raw_socket();
         drop(set);
