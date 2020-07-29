@@ -5,7 +5,7 @@ use super::timeout_stream::TimeoutStream;
 use std::io;
 use std::sync::Arc;
 use std::time::Duration;
-use futures::{stream::{StreamExt, select_all}};
+use futures::{future::try_join, stream::{StreamExt, select_all}};
 
 const TCP_TIMEOUT: Duration = Duration::from_secs(60);
 
@@ -38,7 +38,7 @@ impl TcpGateway {
             let ptcp = match new_tcp_timeout(&proxy, stcp.local_addr()?).await {
                 Ok(s) => s,
                 Err(e) => {
-                    log::error!("tcp connect timedout {:?}", e);
+                    log::error!("tcp connect err {:?}", e);
                     return Err(e);
                 },
             };
@@ -66,7 +66,7 @@ where
     let (mut read_1, mut write_1) = split(s1);
     let (mut read_2, mut write_2) = split(s2);
 
-    let r = futures::future::try_join(
+    try_join(
         async {
             let r = copy(&mut read_1, &mut write_2).await;
             write_2.shutdown().await?;
@@ -77,7 +77,5 @@ where
             write_1.shutdown().await?;
             r
         },
-    ).await;
-
-    r
+    ).await
 }
