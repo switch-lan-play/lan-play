@@ -14,6 +14,7 @@ use std::{
     net::{SocketAddr},
 };
 use crate::rt::{AsyncRead, AsyncWrite, io};
+use futures::{ready, Stream};
 
 pub struct TcpListener {
     handle: SocketHandle,
@@ -74,6 +75,24 @@ impl TcpListener {
             }
             self.source.writable(&self.reactor).await?;
         }
+    }
+    pub fn incoming(self) -> Incoming {
+        Incoming(self)
+    }
+}
+
+pub struct Incoming(TcpListener);
+
+impl Stream for Incoming {
+    type Item = TcpSocket;
+    fn poll_next(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Option<Self::Item>> {
+        let fut = self.0.accept();
+        futures::pin_mut!(fut);
+        let r = ready!(fut.poll(cx));
+        Poll::Ready(r.ok())
     }
 }
 

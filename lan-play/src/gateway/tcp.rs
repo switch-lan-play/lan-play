@@ -5,6 +5,7 @@ use super::timeout_stream::TimeoutStream;
 use std::io;
 use std::sync::Arc;
 use std::time::Duration;
+use futures::{stream::{StreamExt, select_all}};
 
 const TCP_TIMEOUT: Duration = Duration::from_secs(60);
 
@@ -18,9 +19,10 @@ impl TcpGateway {
             proxy,
         }
     }
-    pub async fn process(&self, mut listener: TcpListener) -> io::Result<()> {
+    pub async fn process(&self, listener: Vec<TcpListener>) -> io::Result<()> {
+        let mut listener = select_all(listener.into_iter().map(|i| i.incoming()));
         loop {
-            let tcp = listener.accept().await?;
+            let tcp = listener.next().await.ok_or(io::ErrorKind::NotFound)?;
             let (local_addr, peer_addr) = (tcp.local_addr(), tcp.peer_addr());
             if let Err(e) = self.on_tcp(tcp).await {
                 log::error!("on_tcp {:?}", e);

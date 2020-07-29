@@ -1,11 +1,13 @@
 use crate::error::{Error, Result};
-use crate::future_smoltcp::Net;
+use crate::future_smoltcp::{Net, TcpListener};
 use crate::gateway::Gateway;
 use crate::proxy::BoxProxy;
 use crate::interface::{ErrorWithDesc, RawsockInterface, RawsockInterfaceSet, IntercepterBuilder};
 use crate::client::LanClient;
 use futures::future::join_all;
 use smoltcp::wire::{Ipv4Address, Ipv4Cidr, EthernetFrame, EthernetProtocol, Ipv4Packet};
+
+const BACKLOG: usize = 10;
 
 fn filter_bad_packet(packet: &[u8]) -> Result<()> {
     let packet = EthernetFrame::new_checked(packet)?;
@@ -98,7 +100,7 @@ impl LanPlay {
             intercepter,
             self.mtu,
         );
-        let tcp = net.tcp_listener().await;
+        let tcp: Vec<TcpListener> = join_all((0..BACKLOG).map(|_| net.tcp_listener())).await;
         let udp = net.udp_socket().await;
         if let Err(err) = self.gateway.process(tcp, udp).await {
             log::error!("gateway::process failed {:?}", err);

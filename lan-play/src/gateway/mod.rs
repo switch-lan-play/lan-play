@@ -23,7 +23,7 @@ impl Gateway {
             udp: UdpGateway::new(proxy.clone()),
         }
     }
-    pub async fn process(&self, tcp: TcpListener, udp: UdpSocket) -> io::Result<()> {
+    pub async fn process(&self, tcp: Vec<TcpListener>, udp: UdpSocket) -> io::Result<()> {
         try_join!(self.tcp.process(tcp), self.udp.process(udp))?;
         Ok(())
     }
