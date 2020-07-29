@@ -26,6 +26,10 @@ use interface::RawsockInterfaceSet;
 use smoltcp::wire::Ipv4Cidr;
 use std::net::Ipv4Addr;
 use url::Url;
+use logging_allocator::LoggingAllocator;
+
+#[global_allocator]
+static ALLOC: LoggingAllocator = LoggingAllocator::new();
 
 #[cfg(feature = "socks5")]
 use proxy::Socks5Proxy;
@@ -53,6 +57,10 @@ enum Subcommand {
 /// Lan play
 #[derive(Debug, StructOpt)]
 struct Opt {
+    /// allocator log
+    #[structopt(short, long)]
+    allocator_log: bool,
+
     /// IP Address
     #[structopt(short, long, parse(try_from_str = str::parse), default_value = "10.13.37.2")]
     gateway_ip: Ipv4Addr,
@@ -224,6 +232,9 @@ async fn main() -> Result<()> {
     env_logger::from_env(env_logger::Env::default().default_filter_or("info")).init();
 
     let opt = Opt::from_args();
+    if opt.allocator_log {
+        ALLOC.enable_logging();
+    }
     match &opt.subcommand {
         Some(Subcommand::Ping { relay, times  }) => ping(relay, times).await,
         Some(Subcommand::Check { proxy }) => check(proxy).await,
