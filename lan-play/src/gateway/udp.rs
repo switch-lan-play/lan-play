@@ -64,7 +64,6 @@ impl UdpGateway {
             spawn(async move {
                 let _ = timeout.await;
                 pop_tx.send(src).await.unwrap();
-                log::trace!("Udp timeout");
             });
             cache.put(src, UdpConnection::new(&self.proxy, sender, src, visitor).await?);
             log::trace!("new udp from {:?}", src);
