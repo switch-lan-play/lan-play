@@ -105,10 +105,12 @@ impl NetReactor {
             };
             let device = ethernet.device_mut();
 
-            select! {
-                _ = delay_for(deadline.into()).fuse() => {},
-                _ = device.wait().fuse() => {},
-                _ = self.notify.notified().fuse() => {},
+            if device.need_wait() {
+                select! {
+                    _ = delay_for(deadline.into()).fuse() => {},
+                    _ = device.wait().fuse() => {},
+                    _ = self.notify.notified().fuse() => {},
+                }
             }
             let mut set = sockets.lock().unwrap();
             let end = Instant::now();

@@ -25,6 +25,9 @@ impl FutureDevice {
             temp: None,
         }
     }
+    pub fn need_wait(&self) -> bool {
+        self.temp.is_none()
+    }
     pub async fn wait(&mut self) {
         self.temp = self.receiver.recv().await.ok();
     }
