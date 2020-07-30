@@ -30,8 +30,8 @@ impl SocketSet {
 
 fn new_tcp_socket() -> socket::TcpSocket<'static> {
     use smoltcp::socket::{TcpSocket, TcpSocketBuffer};
-    let rx_buffer = TcpSocketBuffer::new(vec![0; 8192]);
-    let tx_buffer = TcpSocketBuffer::new(vec![0; 8192]);
+    let rx_buffer = TcpSocketBuffer::new(vec![0; 2048]);
+    let tx_buffer = TcpSocketBuffer::new(vec![0; 2048]);
     let mut tcp = TcpSocket::new(rx_buffer, tx_buffer);
     tcp.set_accept_all(true);
     tcp.listen(0).unwrap();

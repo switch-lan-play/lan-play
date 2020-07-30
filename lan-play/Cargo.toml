@@ -5,7 +5,6 @@ authors = ["spacemeowx2 <spacemeowx2@gmail.com>"]
 edition = "2018"
 
 [dependencies]
-tokio = { version = "0.2.21", features = ["full"], optional = true }
 async-std = { version = "1.6", features = ["attributes", "unstable"], optional = true }
 async-channel = "1.1"
 futures = "0.3.5"
@@ -29,11 +28,17 @@ base64 = { version = "0.12.3", optional = true }
 async-timeout = "0.1"
 logging-allocator = "0.1.1"
 
+[dependencies.tokio]
+version = "0.2.22"
+features = ["blocking", "dns", "fs", "io-driver", "io-util", "io-std", "macros", "net", "process", "rt-core", "rt-util", "signal", "stream", "sync", "time"]
+optional = true
+
 [features]
 default = [ "tokio", "socks5" ]
 shadowsocks = [ "shadowsocks-rust", "base64" ]
 async_std = [ "async-std" ]
 socks5 = [ "async-socks5" ]
+mt_executor = ["tokio/rt-threaded"]
 
 [dependencies.smoltcp]
 # version = "0.5.0"
