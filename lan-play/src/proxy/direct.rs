@@ -1,7 +1,6 @@
 use super::{socket, BoxProxy, BoxTcp, BoxUdp, Proxy, SocketAddr};
 use crate::rt::{io, TcpStream, UdpSocket};
 
-#[async_trait]
 impl socket::Tcp for TcpStream {}
 
 #[async_trait]

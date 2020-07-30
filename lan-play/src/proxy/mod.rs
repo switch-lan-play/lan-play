@@ -29,7 +29,7 @@ pub mod socket {
 
     pub type BoxTcp = Box<dyn Tcp + Unpin + Send>;
     pub type BoxUdp = Box<dyn Udp + Unpin + Send>;
-    #[async_trait]
+
     pub trait Tcp: AsyncRead + AsyncWrite {}
 
     #[async_trait]
