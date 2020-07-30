@@ -95,6 +95,7 @@ impl NetReactor {
     pub async fn run(&self, mut ethernet: Ethernet) {
         let default_timeout = Duration::from_millis(1000);
         let sockets = &self.socket_set;
+        let mut ready = Vec::new();
 
         loop {
             let start = Instant::now();
@@ -127,7 +128,6 @@ impl NetReactor {
                 continue;
             }
 
-            let mut ready = Vec::new();
             let sources = self.sources.lock().unwrap();
             for socket in set.as_set_mut().iter() {
                 let (readable, writable) = match socket {
@@ -153,7 +153,7 @@ impl NetReactor {
                 }
             }
             drop(sources);
-            for waker in ready {
+            for waker in ready.drain(..) {
                 waker.wake();
             }
         }
