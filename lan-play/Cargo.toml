@@ -34,7 +34,7 @@ features = ["blocking", "dns", "fs", "io-driver", "io-util", "io-std", "macros",
 optional = true
 
 [features]
-default = [ "tokio", "socks5" ]
+default = [ "tokio", "socks5", "shadowsocks" ]
 shadowsocks = [ "shadowsocks-rust", "base64" ]
 async_std = [ "async-std" ]
 socks5 = [ "async-socks5" ]

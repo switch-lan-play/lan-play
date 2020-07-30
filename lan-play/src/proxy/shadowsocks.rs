@@ -1,13 +1,17 @@
 use super::{other, BoxProxy, BoxTcp, BoxUdp, Proxy, SocketAddr, io, Socks5Proxy};
 use shadowsocks::{run_local, Config, ServerConfig, ServerAddr, ConfigType, Mode, crypto::cipher::CipherType};
 use std::str::FromStr;
+use tokio::runtime::Runtime;
 
 pub struct ShadowsocksProxy {
+    _rt: Runtime,
     inner: BoxProxy,
 }
 
 impl ShadowsocksProxy {
     pub fn new(url: &url::Url) -> io::Result<BoxProxy> {
+        let rt = Runtime::new().unwrap();
+
         let bind_addr: SocketAddr = "127.13.37.1:50124".parse().unwrap();
 
         if url.scheme() != "ss" {
@@ -37,15 +41,18 @@ impl ShadowsocksProxy {
                 config.mode = Mode::TcpAndUdp;
 
                 // log::debug!("shadowsocks config: {:#?}", config);
-                crate::rt::spawn(async {
-                    let r = run_local(config).await;
-                    log::debug!("shadowsocks {:?}", r);
+                rt.enter(|| {
+                    tokio::spawn(async {
+                        let r = run_local(config).await;
+                        log::debug!("shadowsocks {:?}", r);
+                    });
                 });
             }
             _ => return Err(other("Wrong url"))
         }
 
         Ok(Box::new(Self {
+            _rt: rt,
             inner: Socks5Proxy::new(bind_addr.to_string(), None),
         }))
     }
