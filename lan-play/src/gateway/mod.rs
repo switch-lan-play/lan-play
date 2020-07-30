@@ -6,7 +6,7 @@ use crate::future_smoltcp::{TcpListener, UdpSocket};
 use crate::proxy::BoxProxy;
 use std::io;
 use std::sync::Arc;
-use futures::try_join;
+use futures::future::try_join;
 use tcp::TcpGateway;
 use udp::UdpGateway;
 
@@ -24,10 +24,10 @@ impl Gateway {
         }
     }
     pub async fn process(&self, tcp: Vec<TcpListener>, udp: UdpSocket) -> io::Result<()> {
-        try_join!(
+        try_join(
             self.tcp.process(tcp),
             self.udp.process(udp),
-        )?;
+        ).await?;
         Ok(())
     }
 }
