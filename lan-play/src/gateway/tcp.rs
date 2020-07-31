@@ -38,7 +38,7 @@ impl TcpGateway {
             let ptcp = match new_tcp_timeout(&proxy, stcp.local_addr()?).await {
                 Ok(s) => s,
                 Err(e) => {
-                    log::error!("tcp connect err {:?}", e);
+                    log::error!("tcp connect to {:?} err {:?}", stcp.local_addr()?, e);
                     return Err(e);
                 },
             };

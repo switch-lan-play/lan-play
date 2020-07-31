@@ -89,7 +89,6 @@ impl RawsockInterface {
         packet_sender: Sender<Packet>,
         intercepter: IntercepterFn,
     ) {
-        log::debug!("recv thread start");
         thread::spawn(move || {
             let r = interface.loop_infinite_dyn(&|packet| {
                 if intercepter(packet) {
