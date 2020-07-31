@@ -94,7 +94,7 @@ impl RawsockInterface {
                 if intercepter(packet) {
                     return
                 }
-                if let Err(err) = packet_sender.try_send(packet.as_owned().to_vec()) {
+                if let Err(err) = packet_sender.try_send(packet.to_vec()) {
                     log::warn!("recv error: {:?}", err);
                 }
             });
