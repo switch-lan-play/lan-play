@@ -24,7 +24,10 @@ impl Gateway {
         }
     }
     pub async fn process(&self, tcp: Vec<TcpListener>, udp: UdpSocket) -> io::Result<()> {
-        try_join!(self.tcp.process(tcp), self.udp.process(udp))?;
+        try_join!(
+            self.tcp.process(tcp),
+            self.udp.process(udp),
+        )?;
         Ok(())
     }
 }

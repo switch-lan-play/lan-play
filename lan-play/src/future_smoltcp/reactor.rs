@@ -115,25 +115,22 @@ impl NetReactor {
             }
             let mut set = sockets.lock().unwrap();
             let end = Instant::now();
-            let readiness = match ethernet.poll(set.as_set_mut(), end) {
-                Ok(b) => b,
-                Err(smoltcp::Error::Dropped) => false,
+            match ethernet.poll(set.as_set_mut(), end) {
+                Ok(true) => (),
+                // readiness not changed
+                Ok(false) | Err(smoltcp::Error::Dropped) => continue,
                 Err(e) => {
                     log::error!("poll error {:?}", e);
-                    true
+                    continue;
                 }
             };
-
-            if !readiness {
-                continue;
-            }
 
             let sources = self.sources.lock().unwrap();
             for socket in set.as_set_mut().iter() {
                 let (readable, writable) = match socket {
                     smoltcp::socket::Socket::Tcp(tcp) => (
-                        tcp.can_recv() || tcp.state() != TcpState::Established,
-                        tcp.can_send() || tcp.state() != TcpState::Established,
+                        tcp.can_recv() || is_going_to_close(tcp.state()),
+                        tcp.can_send() || is_going_to_close(tcp.state()),
                     ),
                     smoltcp::socket::Socket::Raw(raw) => (raw.can_recv(), raw.can_send()),
                     _ => continue, // ignore other type
@@ -157,5 +154,12 @@ impl NetReactor {
                 waker.wake();
             }
         }
+    }
+}
+
+fn is_going_to_close(s: TcpState) -> bool {
+    match s {
+        TcpState::Closed | TcpState::Listen | TcpState::SynSent | TcpState::SynReceived | TcpState::Established => false,
+        _ => true,
     }
 }
