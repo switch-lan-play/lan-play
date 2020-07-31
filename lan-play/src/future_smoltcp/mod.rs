@@ -15,6 +15,7 @@ use smoltcp::{
     wire::{EthernetAddress, IpCidr, Ipv4Address},
 };
 pub use socket::{SocketHandle, TcpListener, TcpSocket, UdpSocket};
+pub use socketset::BufferSize;
 use socketset::SocketSet;
 use std::collections::BTreeMap;
 use device::FutureDevice;
@@ -34,6 +35,7 @@ impl Net {
         interf: RawsockInterface,
         intercepter: IntercepterBuilder,
         mtu: usize,
+        buffer_size: BufferSize,
     ) -> Net {
         let (_running, tx, rx) = interf.start(
             intercepter
@@ -51,7 +53,7 @@ impl Net {
             .routes(routes)
             .finalize();
 
-        let reactor = NetReactor::new();
+        let reactor = NetReactor::new(buffer_size);
         let r = reactor.clone();
         crate::rt::spawn(async move {
             r.run(ethernet).await

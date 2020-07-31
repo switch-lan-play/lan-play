@@ -1,5 +1,5 @@
 use crate::rt::{Notify, delay_for};
-use super::{Ethernet, SocketHandle, SocketSet};
+use super::{Ethernet, SocketHandle, SocketSet, BufferSize};
 use futures::prelude::*;
 use futures::select;
 use smoltcp::{socket::TcpState, time::{Duration, Instant}};
@@ -66,9 +66,9 @@ impl Source {
 }
 
 impl NetReactor {
-    pub fn new() -> Arc<NetReactor> {
+    pub fn new(buffer_size: BufferSize) -> Arc<NetReactor> {
         Arc::new(NetReactor {
-            socket_set: Mutex::new(SocketSet::new()),
+            socket_set: Mutex::new(SocketSet::new(buffer_size)),
             sources: Mutex::new(HashMap::new()),
             notify: Notify::new(),
         })

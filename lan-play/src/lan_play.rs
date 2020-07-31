@@ -1,5 +1,5 @@
 use crate::error::{Error, Result};
-use crate::future_smoltcp::{Net, TcpListener};
+use crate::future_smoltcp::{Net, TcpListener, BufferSize};
 use crate::gateway::Gateway;
 use crate::proxy::BoxProxy;
 use crate::interface::{ErrorWithDesc, RawsockInterface, RawsockInterfaceSet, IntercepterBuilder};
@@ -31,15 +31,17 @@ pub struct LanPlay {
     ipv4cidr: Ipv4Cidr,
     gateway_ip: Ipv4Address,
     mtu: usize,
+    buffer_size: BufferSize,
 }
 
 impl LanPlay {
-    pub fn new(proxy: BoxProxy, ipv4cidr: Ipv4Cidr, gateway_ip: Ipv4Address, mtu: usize) -> LanPlay {
+    pub fn new(proxy: BoxProxy, ipv4cidr: Ipv4Cidr, gateway_ip: Ipv4Address, mtu: usize, buffer_size: BufferSize) -> LanPlay {
         LanPlay {
             gateway: Gateway::new(proxy),
             ipv4cidr,
             gateway_ip,
             mtu,
+            buffer_size,
         }
     }
     pub async fn start(&mut self, set: &RawsockInterfaceSet, netif: Option<String>, client: Option<LanClient>) -> Result<()> {
@@ -99,6 +101,7 @@ impl LanPlay {
             interf,
             intercepter,
             self.mtu,
+            self.buffer_size,
         );
         let tcp: Vec<TcpListener> = join_all((0..BACKLOG).map(|_| net.tcp_listener())).await;
         let udp = net.udp_socket().await;

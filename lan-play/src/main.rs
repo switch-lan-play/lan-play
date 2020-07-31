@@ -26,6 +26,7 @@ use interface::RawsockInterfaceSet;
 use smoltcp::wire::Ipv4Cidr;
 use std::net::Ipv4Addr;
 use url::Url;
+use future_smoltcp::BufferSize;
 
 #[cfg(feature = "logging-allocator")]
 #[global_allocator]
@@ -64,6 +65,10 @@ struct Opt {
     /// MTU
     #[structopt(long, default_value = "1400")]
     mtu: usize,
+
+    /// Buffer size for each TCP connection in bytes
+    #[structopt(long, default_value = "131072")]
+    tcp_buffer_size: usize,
 
     /// Prefix length
     #[structopt(long, default_value = "16")]
@@ -157,11 +162,21 @@ async fn run(opt: Opt) -> Result<()> {
         Some(relay) => Some(LanClient::new(relay, ipv4cidr).await?),
         None => None,
     };
+    let tcp_half = opt.tcp_buffer_size / 2;
 
     let set = RawsockInterfaceSet::new(&RAWSOCK_LIB, ipv4cidr)
         .expect("Could not open any packet capturing library");
 
-    let mut lp = LanPlay::new(proxy, ipv4cidr, gateway_ip, opt.mtu);
+    let mut lp = LanPlay::new(
+        proxy,
+        ipv4cidr,
+        gateway_ip,
+        opt.mtu,
+        BufferSize {
+            tcp_rx_size: tcp_half,
+            tcp_tx_size: tcp_half,
+        },
+    );
 
     lp.start(&set, opt.netif, client).await?;
 
