@@ -15,7 +15,6 @@ mod interface_info;
 mod lan_play;
 mod proxy;
 mod interface;
-mod rt;
 
 use client::LanClient;
 use error::Result;
@@ -27,6 +26,7 @@ use smoltcp::wire::Ipv4Cidr;
 use std::net::Ipv4Addr;
 use url::Url;
 use future_smoltcp::BufferSize;
+use tokio::{time::{Instant, Duration, timeout, delay_for}, prelude::*};
 
 #[cfg(feature = "logging-allocator")]
 #[global_allocator]
@@ -184,8 +184,6 @@ async fn run(opt: Opt) -> Result<()> {
 }
 
 async fn ping(relay: &str, times: &Option<u64>) -> Result<()> {
-    use crate::rt::{Instant, Duration, timeout, delay_for};
-
     let client = LanClient::new(relay.to_string(), Ipv4Cidr::new(Ipv4Addr::UNSPECIFIED.into(), 0)).await?;
     let times = times.unwrap_or(4);
 
@@ -202,7 +200,6 @@ async fn ping(relay: &str, times: &Option<u64>) -> Result<()> {
 }
 
 async fn check(proxy: &Option<Url>) -> Result<()> {
-    use crate::rt::prelude::*;
 
     let domain = "example.org";
     let proxy = parse_proxy(proxy);
@@ -237,7 +234,7 @@ async fn check(proxy: &Option<Url>) -> Result<()> {
     Ok(())
 }
 
-#[rt::main]
+#[tokio::main]
 async fn main() -> Result<()> {
     dotenv::dotenv().ok();
     env_logger::from_env(env_logger::Env::default().default_filter_or("info")).init();

@@ -1,4 +1,4 @@
-use crate::rt::{timeout, Duration};
+use tokio::time::{timeout, Duration};
 pub use self::direct::DirectProxy;
 pub use std::io;
 pub use std::net::{IpAddr, Ipv4Addr, SocketAddr};
@@ -22,8 +22,8 @@ const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 
 pub mod socket {
     use std::{net::SocketAddr, sync::{Arc, Mutex as SyncMutex}};
-    use crate::rt::{
-        io, AsyncRead, AsyncWrite,
+    use tokio::io::{
+        self, AsyncRead, AsyncWrite,
     };
     use futures::{future::{poll_fn, Future}, pin_mut};
 
@@ -136,9 +136,7 @@ pub struct Auth {
 mod test {
     use super::socks5::test::socks5_server;
     use super::*;
-    use crate::rt::{io, copy, split, spawn};
-    use crate::rt::{TcpListener, UdpSocket};
-    use crate::rt::prelude::*;
+    use tokio::{io::{self, copy, split}, spawn, net::{TcpListener, UdpSocket}, prelude::*};
 
     async fn server_tcp() -> (TcpListener, SocketAddr) {
         let server = TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -152,7 +150,7 @@ mod test {
         (server, addr)
     }
 
-    #[crate::rt::test]
+    #[tokio::test]
     async fn test_direct_proxy() -> io::Result<()> {
         let (mut server, addr) = server_tcp().await;
         let join = spawn(async move {
@@ -177,7 +175,7 @@ mod test {
         Ok(())
     }
 
-    #[crate::rt::test]
+    #[tokio::test]
     async fn test_direct_proxy_udp() -> io::Result<()> {
         let (mut server, target) = server_udp().await;
         let join = spawn(async move {
@@ -199,7 +197,7 @@ mod test {
         Ok(())
     }
 
-    #[crate::rt::test]
+    #[tokio::test]
     async fn test_socks5_proxy() -> anyhow::Result<()> {
         let (socks5, socks5_addr) = socks5_server().await;
 

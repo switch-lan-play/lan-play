@@ -1,4 +1,4 @@
-use crate::rt::{AsyncRead, AsyncWrite, Duration, io};
+use tokio::{io::{self, AsyncRead, AsyncWrite}, time::Duration};
 use std::task::{Context, Poll};
 use std::pin::Pin;
 use futures::ready;

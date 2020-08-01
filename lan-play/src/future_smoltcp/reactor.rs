@@ -1,4 +1,4 @@
-use crate::rt::{Notify, delay_for};
+use tokio::{sync::Notify, time::delay_for};
 use super::{Ethernet, SocketHandle, SocketSet, BufferSize};
 use futures::prelude::*;
 use futures::select;

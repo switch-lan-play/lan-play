@@ -1,6 +1,6 @@
 use crate::future_smoltcp::{OwnedUdp, UdpSocket};
 use crate::proxy::{other, BoxProxy, SendHalf, RecvHalf, new_udp_timeout};
-use crate::rt::{spawn, Mutex, Duration};
+use tokio::{spawn, sync::Mutex, time::Duration};
 use drop_abort::{abortable, DropAbortHandle};
 use std::io;
 use std::net::SocketAddr;
@@ -112,7 +112,7 @@ impl UdpConnection {
         let (fut, _handle) = abortable(
             UdpConnection::run(rx, sender, src)
         );
-        crate::rt::spawn(fut);
+        tokio::spawn(fut);
         Ok(UdpConnection {
             sender: tx,
             visitor,

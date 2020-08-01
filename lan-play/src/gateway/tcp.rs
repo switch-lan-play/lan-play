@@ -1,6 +1,6 @@
 use crate::future_smoltcp::{TcpListener, TcpSocket};
 use crate::proxy::{BoxProxy, new_tcp_timeout};
-use crate::rt::{copy, split, Instant, prelude::*};
+use tokio::{io::{copy, split}, time::Instant, prelude::*};
 use super::timeout_stream::TimeoutStream;
 use std::io;
 use std::sync::Arc;
@@ -33,7 +33,7 @@ impl TcpGateway {
     async fn on_tcp(&self, stcp: TcpSocket) -> io::Result<()> {
         let proxy = self.proxy.clone();
 
-        crate::rt::spawn(async move {
+        tokio::spawn(async move {
             let (local_addr, peer_addr) = (stcp.local_addr(), stcp.peer_addr());
             let ptcp = match new_tcp_timeout(&proxy, stcp.local_addr()?).await {
                 Ok(s) => s,

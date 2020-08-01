@@ -1,5 +1,5 @@
 use super::{socket, BoxProxy, BoxTcp, BoxUdp, Proxy, SocketAddr};
-use crate::rt::{io, TcpStream, UdpSocket};
+use tokio::{io, net::{TcpStream, UdpSocket}};
 
 impl socket::Tcp for TcpStream {}
 

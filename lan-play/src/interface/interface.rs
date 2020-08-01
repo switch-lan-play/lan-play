@@ -1,6 +1,6 @@
 use super::{Error, ErrorWithDesc, intercepter::{IntercepterBuilder, IntercepterFn}};
 use crate::interface_info::{get_interface_info, InterfaceInfo};
-use crate::rt::{spawn, JoinHandle};
+use tokio::task::JoinHandle;
 use async_channel::{unbounded, Receiver, Sender};
 use rawsock::traits::{DynamicInterface, Library};
 use rawsock::InterfaceDescription;
@@ -84,7 +84,7 @@ impl RawsockInterface {
         let intercepter = intercepter_builder.build(sink.clone());
 
         Self::start_thread(interface.clone(), packet_sender, intercepter);
-        let running = spawn(Self::run(interface, packet_receiver));
+        let running = tokio::spawn(Self::run(interface, packet_receiver));
 
         (running, sink, stream)
     }

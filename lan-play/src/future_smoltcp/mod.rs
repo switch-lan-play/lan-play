@@ -55,7 +55,7 @@ impl Net {
 
         let reactor = NetReactor::new(buffer_size);
         let r = reactor.clone();
-        crate::rt::spawn(async move {
+        tokio::spawn(async move {
             r.run(ethernet).await
         });
 

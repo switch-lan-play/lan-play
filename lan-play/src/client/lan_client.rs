@@ -1,5 +1,5 @@
 use crate::interface::{IntercepterFactory, Packet, BorrowedPacket};
-use crate::rt::{Mutex, UdpSocket, interval, Duration};
+use tokio::{sync::Mutex, net::UdpSocket, time::{interval, Duration}};
 use async_channel::{Sender, Receiver, unbounded};
 use futures::stream::StreamExt;
 use std::sync::{Arc, Mutex as SyncMutex};
@@ -159,7 +159,7 @@ impl LanClient {
             arp: SyncMutex::new(HashMap::new()),
             tx,
         });
-        crate::rt::spawn(Self::process(inner.clone(), rx));
+        tokio::spawn(Self::process(inner.clone(), rx));
         Ok(LanClient {
             relay_server,
             inner,

@@ -13,7 +13,7 @@ use std::{
     future::Future,
     net::{SocketAddr},
 };
-use crate::rt::{AsyncRead, AsyncWrite, io};
+use tokio::io::{self, AsyncRead, AsyncWrite};
 use futures::{ready, Stream};
 
 pub struct TcpListener {
