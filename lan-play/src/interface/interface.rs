@@ -11,11 +11,22 @@ use std::thread;
 
 pub type Packet = Vec<u8>;
 type Interface = std::sync::Arc<dyn DynamicInterface<'static> + 'static>;
+
 pub struct RawsockInterface {
     pub desc: InterfaceDescription,
     mac: EthernetAddress,
     data_link: rawsock::DataLink,
     interface: Arc<dyn DynamicInterface<'static>>,
+}
+
+impl std::fmt::Debug for RawsockInterface {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("RawsockInterface")
+            .field("desc", &self.desc)
+            .field("mac", &self.mac)
+            .field("data_link", &self.data_link)
+            .finish()
+    }
 }
 
 impl RawsockInterface {
@@ -135,7 +146,7 @@ impl RawsockInterfaceSet {
             opened.into_iter().map(Result::unwrap).collect::<Vec<_>>(),
             errored
                 .into_iter()
-                .map(|i| i.err().unwrap())
+                .map(Result::unwrap_err)
                 .collect::<Vec<_>>(),
         )
     }
