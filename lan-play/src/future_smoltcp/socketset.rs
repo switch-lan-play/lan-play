@@ -1,5 +1,9 @@
 use smoltcp::{
-    socket::{self, SocketHandle, SocketSet as InnerSocketSet},
+    socket::{
+        self, SocketHandle, SocketSet as InnerSocketSet, SocketRef, AnySocket, RawPacketMetadata,
+        RawSocket, RawSocketBuffer, TcpSocket, TcpSocketBuffer,
+    },
+    wire::{IpProtocol, IpVersion},
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -23,6 +27,9 @@ impl SocketSet {
     pub fn as_set_mut(&mut self) -> &mut InnerSocketSet<'static, 'static, 'static> {
         &mut self.set
     }
+    pub fn get<T: AnySocket<'static, 'static>>(&mut self, handle: SocketHandle) -> SocketRef<T> {
+        self.set.get(handle)
+    }
     pub fn remove(&mut self, handle: SocketHandle) {
         self.set.remove(handle);
     }
@@ -35,7 +42,6 @@ impl SocketSet {
         handle
     }
     fn alloc_tcp_socket(&self) -> socket::TcpSocket<'static> {
-        use smoltcp::socket::{TcpSocket, TcpSocketBuffer};
         let rx_buffer = TcpSocketBuffer::new(vec![0; self.buffer_size.tcp_rx_size]);
         let tx_buffer = TcpSocketBuffer::new(vec![0; self.buffer_size.tcp_tx_size]);
         let mut tcp = TcpSocket::new(rx_buffer, tx_buffer);
@@ -45,8 +51,6 @@ impl SocketSet {
         tcp
     }
     fn alloc_raw_socket(&self) -> socket::RawSocket<'static, 'static> {
-        use smoltcp::socket::{RawPacketMetadata, RawSocket, RawSocketBuffer};
-        use smoltcp::wire::{IpProtocol, IpVersion};
         let rx_buffer = RawSocketBuffer::new(vec![RawPacketMetadata::EMPTY; 32], vec![0; 8192]);
         let tx_buffer = RawSocketBuffer::new(vec![RawPacketMetadata::EMPTY; 32], vec![0; 8192]);
         let raw = RawSocket::new(IpVersion::Ipv4, IpProtocol::Udp, rx_buffer, tx_buffer);
