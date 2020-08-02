@@ -28,7 +28,7 @@ impl UdpGateway {
         let (pop_tx, pop_rx) = unbounded();
         try_join(
             self.process_udp(udp, pop_tx),
-            self.process_pop(pop_rx)
+            self.process_pop(pop_rx),
         ).await?;
         Ok(())
     }

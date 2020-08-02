@@ -27,7 +27,7 @@ impl TcpGateway {
             if let Err(e) = self.on_tcp(tcp).await {
                 log::error!("on_tcp {:?}", e);
             }
-            log::trace!("new tcp  {:?} -> {:?}", peer_addr, local_addr);
+            log::trace!("tcp {:?} -> {:?}", peer_addr?, local_addr?);
         }
     }
     async fn on_tcp(&self, stcp: TcpSocket) -> io::Result<()> {
@@ -50,7 +50,7 @@ impl TcpGateway {
             );
             let r = pipe(stcp, ptcp).await;
 
-            log::trace!("tcp done {:?} -> {:?} {:?} {:?}", peer_addr, local_addr, r, start.elapsed());
+            log::trace!("tcp {:?} -x {:?} {:?} {:?}", peer_addr?, local_addr?, r, start.elapsed());
 
             Ok::<(), io::Error>(())
         });
