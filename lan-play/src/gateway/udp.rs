@@ -1,14 +1,14 @@
-use crate::future_smoltcp::{OwnedUdp, UdpSocket};
+use crate::future_smoltcp::{OwnedUdp, UdpSocket, SendHalf as UdpSendHalf};
 use crate::proxy::{other, BoxProxy, SendHalf, RecvHalf, new_udp_timeout};
 use tokio::{spawn, sync::Mutex, time::Duration};
 use drop_abort::{abortable, DropAbortHandle};
 use std::io;
 use std::net::SocketAddr;
 use std::sync::Arc;
-use futures::{select, future::FutureExt};
+use futures::future::try_join;
 use lru::LruCache;
 use async_timeout::{VisitorTimeout, Visitor};
-use async_channel::{Sender, unbounded};
+use async_channel::{Sender, Receiver, unbounded};
 
 const UDP_TIMEOUT: Duration = Duration::from_secs(60);
 
@@ -24,38 +24,35 @@ impl UdpGateway {
             cache: Mutex::new(LruCache::new(100)),
         }
     }
-    pub async fn process(&self, mut udp: UdpSocket) -> io::Result<()> {
-        let (udp_tx, udp_rx) = unbounded();
+    pub async fn process(&self, udp: UdpSocket) -> io::Result<()> {
         let (pop_tx, pop_rx) = unbounded();
+        try_join(
+            self.process_udp(udp, pop_tx),
+            self.process_pop(pop_rx)
+        ).await?;
+        Ok(())
+    }
+    async fn process_udp(&self, udp: UdpSocket, pop_tx: Sender<SocketAddr>) -> io::Result<()> {
+        let (tx, mut rx) = udp.split();
+        let sender = Arc::new(Mutex::new(tx));
         loop {
-            select! {
-                result = udp.recv().fuse() => {
-                    let udp = result?;
-                    if let Err(e) = self.on_udp(udp, udp_tx.clone(), pop_tx.clone()).await {
-                        log::error!("on_udp {:?}", e);
-                    }
-                }
-                p = udp_rx.recv().fuse() => {
-                    if let Ok(p) = p {
-                        if let Err(e) = udp.send(p).await {
-                            log::error!("udp.send {:?}", e);
-                        }
-                    } else {
-                        todo!("handle error");
-                    }
-                }
-                key = pop_rx.recv().fuse() => {
-                    if let Ok(key) = key {
-                        let mut cache = self.cache.lock().await;
-                        cache.pop(&key);
-                    } else {
-                        todo!("handle error");
-                    }
-                }
+            let udp = rx.recv().await?;
+            if let Err(e) = self.on_udp(udp, sender.clone(), pop_tx.clone()).await {
+                log::error!("on_udp {:?}", e);
             }
         }
     }
-    async fn on_udp(&self, udp: OwnedUdp, sender: Sender<OwnedUdp>, pop_tx: Sender<SocketAddr>) -> io::Result<()> {
+    async fn process_pop(&self, pop_rx: Receiver<SocketAddr>) -> io::Result<()> {
+        loop {
+            if let Ok(key) = pop_rx.recv().await {
+                let mut cache = self.cache.lock().await;
+                cache.pop(&key);
+            } else {
+                todo!("handle error");
+            }
+        }
+    }
+    async fn on_udp(&self, udp: OwnedUdp, sender: Arc<Mutex<UdpSendHalf>>, pop_tx: Sender<SocketAddr>) -> io::Result<()> {
         let mut cache = self.cache.lock().await;
         let src = udp.src();
         if !cache.contains(&src) {
@@ -89,21 +86,25 @@ impl Drop for UdpConnection {
 impl UdpConnection {
     pub(super) async fn run(
         mut rx: RecvHalf,
-        sender: Sender<OwnedUdp>,
+        sender: Arc<Mutex<UdpSendHalf>>,
         src: SocketAddr,
     ) -> io::Result<()> {
         loop {
             let mut buf = vec![0; 2048];
             let (size, addr) = rx.recv_from(&mut buf).await?;
             buf.truncate(size);
+            let data = OwnedUdp::new(addr, src, buf);
             sender
-                .try_send(OwnedUdp::new(addr, src, buf))
+                .lock()
+                .await
+                .send(&data)
+                .await
                 .map_err(other)?;
         }
     }
     pub(super) async fn new(
         proxy: &Arc<BoxProxy>,
-        sender: Sender<OwnedUdp>,
+        sender: Arc<Mutex<UdpSendHalf>>,
         src: SocketAddr,
         visitor: Visitor,
     ) -> io::Result<UdpConnection> {

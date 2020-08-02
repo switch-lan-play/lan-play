@@ -14,7 +14,7 @@ use smoltcp::{
     },
     wire::{EthernetAddress, IpCidr, Ipv4Address},
 };
-pub use socket::{SocketHandle, TcpListener, TcpSocket, UdpSocket};
+pub use socket::{SocketHandle, TcpListener, TcpSocket, UdpSocket, SendHalf, RecvHalf};
 pub use socketset::BufferSize;
 use socketset::SocketSet;
 use std::collections::BTreeMap;

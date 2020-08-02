@@ -5,6 +5,8 @@ use super::{
     SocketSet,
 };
 pub use smoltcp::socket::{self, SocketHandle, SocketRef, TcpState, AnySocket};
+use std::sync::Mutex;
+use futures::{future::poll_fn, pin_mut};
 
 use std::{
     pin::Pin,
@@ -157,6 +159,35 @@ impl Stream for Incoming {
     }
 }
 
+pub struct SendHalf {
+    inner: Arc<Mutex<UdpSocket>>,
+}
+pub struct RecvHalf {
+    inner: Arc<Mutex<UdpSocket>>,
+}
+
+impl SendHalf {
+    pub async fn send(&mut self, data: &OwnedUdp) -> io::Result<()> {
+        poll_fn(move |cx| {
+            let mut inner = self.inner.lock().unwrap();
+            let fut = inner.send(data);
+            pin_mut!(fut);
+            fut.poll(cx)
+        }).await
+    }
+}
+
+impl RecvHalf {
+    pub async fn recv(&mut self) -> io::Result<OwnedUdp> {
+        poll_fn(|cx| {
+            let mut inner = self.inner.lock().unwrap();
+            let fut = inner.recv();
+            pin_mut!(fut);
+            fut.poll(cx)
+        }).await
+    }
+}
+
 impl UdpSocket {
     pub(super) async fn new(reactor: Arc<NetReactor>) -> UdpSocket {
         UdpSocket {
@@ -175,7 +206,7 @@ impl UdpSocket {
             None
         }).await
     }
-    pub async fn send(&mut self, data: OwnedUdp) -> io::Result<()> {
+    pub async fn send(&mut self, data: &OwnedUdp) -> io::Result<()> {
         self.base.writable(|socket: &mut SocketRef<socket::RawSocket>| {
             if socket.can_send() {
                 let r = socket.send_slice(&data.to_raw())
@@ -185,6 +216,14 @@ impl UdpSocket {
             }
             None
         }).await
+    }
+    pub fn split(self) -> (SendHalf, RecvHalf) {
+        let inner = Arc::new(Mutex::new(self));
+        (SendHalf {
+            inner: inner.clone(),
+        }, RecvHalf {
+            inner,
+        })
     }
 }
 
