@@ -1,4 +1,4 @@
-use tokio::{sync::Notify, time::delay_for};
+use tokio::{sync::Notify, time::{delay_for, Delay}};
 use super::{Ethernet, SocketHandle, SocketSet, BufferSize};
 use futures::prelude::*;
 use futures::select;
@@ -7,6 +7,21 @@ use std::collections::HashMap;
 use std::io;
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::task::{Poll, Waker};
+
+struct FusedDelay(Delay);
+
+impl std::future::Future for FusedDelay {
+    type Output = ();
+    fn poll(mut self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> Poll<Self::Output> {
+        std::pin::Pin::new(&mut self.0).poll(cx)
+    }
+}
+
+impl futures::future::FusedFuture for FusedDelay {
+    fn is_terminated(&self) -> bool {
+        false
+    }
+}
 
 #[derive(Debug)]
 pub struct Wakers {
@@ -93,9 +108,10 @@ impl NetReactor {
         self.notify.notify();
     }
     pub async fn run(&self, mut ethernet: Ethernet) {
-        let default_timeout = Duration::from_millis(1000);
+        let default_timeout = Duration::from_secs(60);
         let sockets = &self.socket_set;
         let mut ready = Vec::new();
+        let mut delay = FusedDelay(delay_for(default_timeout.into()));
 
         loop {
             let start = Instant::now();
@@ -105,10 +121,11 @@ impl NetReactor {
                     .unwrap_or(default_timeout)
             };
             let device = ethernet.device_mut();
+            delay.0.reset(tokio::time::Instant::now() + deadline.into());
 
             if device.need_wait() {
                 select! {
-                    _ = delay_for(deadline.into()).fuse() => {},
+                    _ = delay => {},
                     _ = device.wait().fuse() => {},
                     _ = self.notify.notified().fuse() => {},
                 }
