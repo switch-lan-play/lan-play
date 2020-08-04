@@ -10,7 +10,7 @@ use std::sync::Arc;
 use std::thread;
 
 pub type Packet = Vec<u8>;
-type Interface = std::sync::Arc<dyn DynamicInterface<'static> + 'static>;
+type Interface = Arc<dyn DynamicInterface<'static> + 'static>;
 
 pub struct RawsockInterface {
     pub desc: InterfaceDescription,
@@ -36,7 +36,7 @@ impl RawsockInterface {
     ) -> Result<RawsockInterface, Error> {
         let name = &desc.name;
         let mut interface = slf.lib.open_interface_arc(name)?;
-        std::sync::Arc::get_mut(&mut interface)
+        Arc::get_mut(&mut interface)
             .ok_or(Error::Other("Bad Arc"))?
             .set_filter_cstr(&slf.filter)?;
 
