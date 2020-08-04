@@ -3,6 +3,8 @@ mod reactor;
 mod socket;
 mod socketset;
 mod device;
+mod channel_sink;
+mod ethernet;
 
 use crate::interface::{RawsockInterface, IntercepterBuilder};
 pub use raw_udp::OwnedUdp;
@@ -18,10 +20,11 @@ pub use socket::{SocketHandle, TcpListener, TcpSocket, UdpSocket, SendHalf, Recv
 pub use socketset::BufferSize;
 use socketset::SocketSet;
 use std::collections::BTreeMap;
-use device::FutureDevice;
+use device::ChannelDevice;
 use std::sync::Arc;
+use channel_sink::SinkSender;
 
-pub type Ethernet = SmoltcpEthernetInterface<'static, 'static, 'static, FutureDevice>;
+pub type Ethernet = SmoltcpEthernetInterface<'static, 'static, 'static, ChannelDevice>;
 
 pub struct Net {
     reactor: Arc<NetReactor>,
@@ -40,7 +43,7 @@ impl Net {
         let (_running, tx, rx) = interf.start(
             intercepter
         );
-        let device = FutureDevice::new(tx, rx, mtu);
+        let device = ChannelDevice::new(SinkSender(tx), rx, mtu);
         let neighbor_cache = NeighborCache::new(BTreeMap::new());
         let mut routes = Routes::new(BTreeMap::new());
         routes.add_default_ipv4_route(gateway_ip).unwrap();

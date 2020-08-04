@@ -3,18 +3,36 @@ use smoltcp::{
     phy::{DeviceCapabilities, RxToken, TxToken},
     time::Instant,
 };
+use std::task::Waker;
+use std::collections::VecDeque;
+use futures::{Stream, Sink};
+use futures::prelude::*;
+use super::channel_sink::SinkSender;
 
-type Packet = Vec<u8>;
+pub type Packet = Vec<u8>;
 
-pub struct FutureDevice {
+pub type ChannelDevice = FutureDevice<Receiver<Packet>, SinkSender<Packet>>;
+
+pub struct FutureDevice<In, Out>
+where
+    In: Stream<Item = Packet>,
+    Out: Sink<Packet>,
+{
     caps: DeviceCapabilities,
-    receiver: Receiver<Packet>,
-    sender: Sender<Packet>,
+    receiver: In,
+    sender: Out,
     temp: Option<Packet>,
+    pub waker: Option<Waker>,
+
+    buf: VecDeque<Packet>,
 }
 
-impl FutureDevice {
-    pub fn new(tx: Sender<Packet>, rx: Receiver<Packet>, mtu: usize) -> FutureDevice {
+impl<In, Out> FutureDevice<In, Out>
+where
+    In: Stream<Item = Packet> + Unpin,
+    Out: Sink<Packet>,
+{
+    pub fn new(tx: Out, rx: In, mtu: usize) -> FutureDevice<In, Out> {
         let mut caps = DeviceCapabilities::default();
         caps.max_transmission_unit = mtu;
         caps.max_burst_size = Some(1);
@@ -23,23 +41,26 @@ impl FutureDevice {
             receiver: rx,
             sender: tx,
             temp: None,
+            waker: None,
+            buf: VecDeque::with_capacity(100),
         }
     }
     pub fn need_wait(&self) -> bool {
         self.temp.is_none()
     }
     pub async fn wait(&mut self) {
-        self.temp = self.receiver.recv().await.ok();
+        self.temp = self.receiver.next().await;
     }
     fn get_next(&mut self) -> Option<Packet> {
         if let Some(t) = self.temp.take() {
             return Some(t);
         }
-        match self.receiver.try_recv() {
-            Ok(p) => Some(p),
-            Err(TryRecvError::Empty) => None,
-            Err(TryRecvError::Closed) => todo!("handle receiver closed"),
-        }
+        unimplemented!();
+        // match self.receiver.try_recv() {
+        //     Ok(p) => Some(p),
+        //     Err(TryRecvError::Empty) => None,
+        //     Err(TryRecvError::Closed) => todo!("handle receiver closed"),
+        // }
     }
 }
 
@@ -75,15 +96,21 @@ impl TxToken for FutureTxToken {
     }
 }
 
-impl<'d> smoltcp::phy::Device<'d> for FutureDevice {
+impl<'d, In, Out> smoltcp::phy::Device<'d> for FutureDevice<In, Out>
+where
+    In: Stream<Item = Packet> + Unpin,
+    Out: Sink<Packet>,
+{
     type RxToken = FutureRxToken;
     type TxToken = FutureTxToken;
 
     fn receive(&'d mut self) -> Option<(Self::RxToken, Self::TxToken)> {
-        self.get_next().map(|p| (FutureRxToken(p), FutureTxToken(self.sender.clone())))
+        unimplemented!();
+        // self.get_next().map(|p| (FutureRxToken(p), FutureTxToken(self.sender.clone())))
     }
     fn transmit(&'d mut self) -> Option<Self::TxToken> {
-        Some(FutureTxToken(self.sender.clone()))
+        unimplemented!();
+        // Some(FutureTxToken(self.sender.clone()))
     }
 
     fn capabilities(&self) -> DeviceCapabilities {

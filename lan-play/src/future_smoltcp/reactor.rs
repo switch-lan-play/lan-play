@@ -2,6 +2,7 @@ use tokio::{sync::Notify, time::delay_for};
 use super::{Ethernet, SocketHandle, SocketSet, BufferSize};
 use futures::prelude::*;
 use futures::select;
+use futures::future::poll_fn;
 use smoltcp::{socket::TcpState, time::{Duration, Instant}};
 use std::collections::HashMap;
 use std::io;
@@ -93,7 +94,7 @@ impl NetReactor {
         self.notify.notify();
     }
     pub async fn run(&self, mut ethernet: Ethernet) {
-        let default_timeout = Duration::from_millis(1000);
+        let default_timeout = Duration::from_secs(10);
         let sockets = &self.socket_set;
         let mut ready = Vec::new();
 
