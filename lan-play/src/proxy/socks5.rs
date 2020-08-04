@@ -1,9 +1,11 @@
 use tokio::{net::{TcpStream, UdpSocket}, io::{self, BufWriter}};
-use super::{other, socket, BoxProxy, BoxTcp, BoxUdp, Proxy, SocketAddr, Auth};
+use super::{other, traits, BoxProxy, BoxTcp, BoxUdp, Proxy, SocketAddr, Auth};
 use async_socks5::{connect, AddrKind, SocksDatagram};
+use std::{pin::Pin, task::{Context, Poll}};
+use futures::{pin_mut, future::Future, ready};
 
 #[async_trait]
-impl socket::Udp for SocksDatagram<BufWriter<TcpStream>> {
+impl traits::Udp for SocksDatagram<BufWriter<TcpStream>> {
     async fn send_to(&mut self, buf: &[u8], addr: SocketAddr) -> io::Result<usize> {
         SocksDatagram::send_to(self, buf, addr).await.map_err(other)
     }
@@ -18,6 +20,29 @@ impl socket::Udp for SocksDatagram<BufWriter<TcpStream>> {
                     Err(other(err))
                 }
             })
+    }
+}
+
+impl traits::Udp2 for SocksDatagram<BufWriter<TcpStream>> {
+    fn poll_send_to(self: &mut Self, cx: &mut Context<'_>, buf: &[u8], target: &SocketAddr) -> Poll<io::Result<usize>> {
+        let fut = self.send_to(buf, *target);
+        pin_mut!(fut);
+        let r = ready!(fut.poll(cx));
+        Poll::Ready(r.map_err(other))
+    }
+    fn poll_recv_from(self: &mut Self, cx: &mut Context<'_>, buf: &mut [u8]) -> Poll<io::Result<(usize, SocketAddr)>> {
+        let fut = self.recv_from(buf);
+        pin_mut!(fut);
+        let r = ready!(fut.poll(cx));
+        let r = match r {
+            Ok((size, AddrKind::Ip(addr))) => Ok((size, addr)),
+            Ok((_, AddrKind::Domain(domain, port))) => {
+                let err = format!("Socks5 udp recv_from get domain {}:{}", domain, port);
+                Err(other(err))
+            },
+            Err(e) => Err(other(e)),
+        };
+        Poll::Ready(r)
     }
 }
 

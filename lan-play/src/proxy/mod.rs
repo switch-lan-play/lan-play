@@ -3,6 +3,7 @@ pub use self::direct::DirectProxy;
 pub use std::io;
 pub use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 
+mod traits;
 mod direct;
 #[cfg(feature = "socks5")]
 mod socks5;
@@ -13,75 +14,13 @@ mod shadowsocks;
 #[cfg(feature = "shadowsocks")]
 pub use self::shadowsocks::ShadowsocksProxy;
 
-pub use socket::{other, BoxTcp, BoxUdp, SendHalf, RecvHalf};
+pub use traits::{other, BoxTcp, BoxUdp, SendHalf, RecvHalf};
 pub type BoxProxy = Box<dyn Proxy + Unpin + Sync + Send>;
 lazy_static! {
     pub static ref ANY_ADDR: SocketAddr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 0);
 }
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 
-pub mod socket {
-    use std::{net::SocketAddr, sync::{Arc, Mutex as SyncMutex}};
-    use tokio::io::{
-        self, AsyncRead, AsyncWrite,
-    };
-    use futures::{future::{poll_fn, Future}, pin_mut};
-
-    pub type BoxTcp = Box<dyn Tcp + Unpin + Send>;
-    pub type BoxUdp = Box<dyn Udp + Unpin + Send>;
-
-    pub trait Tcp: AsyncRead + AsyncWrite {}
-
-    #[async_trait]
-    pub trait Udp {
-        async fn send_to(&mut self, buf: &[u8], addr: SocketAddr) -> io::Result<usize>;
-        async fn recv_from(&mut self, buf: &mut [u8]) -> io::Result<(usize, SocketAddr)>;
-    }
-
-    pub struct SendHalf {
-        inner: Arc<SyncMutex<BoxUdp>>,
-    }
-    pub struct RecvHalf {
-        inner: Arc<SyncMutex<BoxUdp>>,
-    }
-
-    impl dyn Udp + Unpin + Send {
-        pub fn split(self: Box<Self>) -> (SendHalf, RecvHalf) {
-            let inner = Arc::new(SyncMutex::new(self));
-            (SendHalf {
-                inner: inner.clone(),
-            }, RecvHalf {
-                inner,
-            })
-        }
-    }
-
-    impl SendHalf {
-        pub async fn send_to(&mut self, buf: &[u8], addr: SocketAddr) -> io::Result<usize> {
-            poll_fn(|cx| {
-                let mut inner = self.inner.lock().unwrap();
-                let fut = inner.send_to(buf, addr);
-                pin_mut!(fut);
-                fut.poll(cx)
-            }).await
-        }
-    }
-
-    impl RecvHalf {
-        pub async fn recv_from(&mut self, buf: &mut [u8]) -> io::Result<(usize, SocketAddr)> {
-            poll_fn(|cx| {
-                let mut inner = self.inner.lock().unwrap();
-                let fut = inner.recv_from(buf);
-                pin_mut!(fut);
-                fut.poll(cx)
-            }).await
-        }
-    }
-
-    pub fn other<E: Into<Box<dyn std::error::Error + Send + Sync>>>(e: E) -> io::Error {
-        io::Error::new(io::ErrorKind::Other, e)
-    }
-}
 #[async_trait]
 pub trait Proxy {
     async fn new_tcp(&self, addr: SocketAddr) -> io::Result<BoxTcp>;

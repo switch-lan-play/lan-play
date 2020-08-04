@@ -1,15 +1,25 @@
-use super::{socket, BoxProxy, BoxTcp, BoxUdp, Proxy, SocketAddr};
+use super::{traits, BoxProxy, BoxTcp, BoxUdp, Proxy, SocketAddr};
 use tokio::{io, net::{TcpStream, UdpSocket}};
+use std::{pin::Pin, task::{Context, Poll}};
 
-impl socket::Tcp for TcpStream {}
+impl traits::Tcp for TcpStream {}
 
 #[async_trait]
-impl socket::Udp for UdpSocket {
+impl traits::Udp for UdpSocket {
     async fn send_to(&mut self, buf: &[u8], addr: SocketAddr) -> io::Result<usize> {
         UdpSocket::send_to(self, buf, addr).await
     }
     async fn recv_from(&mut self, buf: &mut [u8]) -> io::Result<(usize, SocketAddr)> {
         UdpSocket::recv_from(self, buf).await
+    }
+}
+
+impl traits::Udp2 for UdpSocket {
+    fn poll_send_to(self: &mut Self, cx: &mut Context<'_>, buf: &[u8], target: &SocketAddr) -> Poll<io::Result<usize>> {
+        UdpSocket::poll_send_to(&self, cx, buf, target)
+    }
+    fn poll_recv_from(self: &mut Self, cx: &mut Context<'_>, buf: &mut [u8]) -> Poll<io::Result<(usize, SocketAddr)>> {
+        UdpSocket::poll_recv_from(&self, cx, buf)
     }
 }
 
