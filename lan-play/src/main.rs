@@ -19,7 +19,7 @@ mod interface;
 use client::LanClient;
 use error::Result;
 use lan_play::LanPlay;
-use proxy::{DirectProxy, Auth, BoxProxy};
+use proxy::{DirectProxy, Auth, BoxedProxy};
 use rawsock::traits::Library;
 use interface::RawsockInterfaceSet;
 use smoltcp::wire::Ipv4Cidr;
@@ -124,7 +124,7 @@ fn url_into_addr_auth(url: &Url) -> Option<(String, Option<Auth>)> {
     }
 }
 
-fn parse_proxy(proxy: &Option<Url>) -> BoxProxy {
+fn parse_proxy(proxy: &Option<Url>) -> BoxedProxy {
     let r = match proxy {
         #[cfg(feature = "socks5")]
         Some(url) if url.scheme() == "socks5" => {
@@ -207,7 +207,7 @@ async fn check(proxy: &Option<Url>) -> Result<()> {
     println!("querying DNS record of {}", domain);
     let addr = proxy::resolve(
         &proxy,
-        "8.8.8.8:53".parse().unwrap(),
+        &"8.8.8.8:53".parse().unwrap(),
         domain,
     ).await?;
     println!("UDP test passed");

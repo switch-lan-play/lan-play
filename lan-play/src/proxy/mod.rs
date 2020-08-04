@@ -1,8 +1,8 @@
-use tokio::time::{timeout, Duration};
 pub use self::direct::DirectProxy;
 pub use std::io;
 pub use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 
+mod traits;
 mod direct;
 #[cfg(feature = "socks5")]
 mod socks5;
@@ -13,94 +13,24 @@ mod shadowsocks;
 #[cfg(feature = "shadowsocks")]
 pub use self::shadowsocks::ShadowsocksProxy;
 
-pub use socket::{other, BoxTcp, BoxUdp, SendHalf, RecvHalf};
-pub type BoxProxy = Box<dyn Proxy + Unpin + Sync + Send>;
+pub use traits::{BoxedProxy, BoxedTcp, BoxedUdp, SendHalf, RecvHalf};
 lazy_static! {
     pub static ref ANY_ADDR: SocketAddr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 0);
 }
-const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 
-pub mod socket {
-    use std::{net::SocketAddr, sync::{Arc, Mutex as SyncMutex}};
-    use tokio::io::{
-        self, AsyncRead, AsyncWrite,
-    };
-    use futures::{future::{poll_fn, Future}, pin_mut};
-
-    pub type BoxTcp = Box<dyn Tcp + Unpin + Send>;
-    pub type BoxUdp = Box<dyn Udp + Unpin + Send>;
-
-    pub trait Tcp: AsyncRead + AsyncWrite {}
-
-    #[async_trait]
-    pub trait Udp {
-        async fn send_to(&mut self, buf: &[u8], addr: SocketAddr) -> io::Result<usize>;
-        async fn recv_from(&mut self, buf: &mut [u8]) -> io::Result<(usize, SocketAddr)>;
-    }
-
-    pub struct SendHalf {
-        inner: Arc<SyncMutex<BoxUdp>>,
-    }
-    pub struct RecvHalf {
-        inner: Arc<SyncMutex<BoxUdp>>,
-    }
-
-    impl dyn Udp + Unpin + Send {
-        pub fn split(self: Box<Self>) -> (SendHalf, RecvHalf) {
-            let inner = Arc::new(SyncMutex::new(self));
-            (SendHalf {
-                inner: inner.clone(),
-            }, RecvHalf {
-                inner,
-            })
-        }
-    }
-
-    impl SendHalf {
-        pub async fn send_to(&mut self, buf: &[u8], addr: SocketAddr) -> io::Result<usize> {
-            poll_fn(|cx| {
-                let mut inner = self.inner.lock().unwrap();
-                let fut = inner.send_to(buf, addr);
-                pin_mut!(fut);
-                fut.poll(cx)
-            }).await
-        }
-    }
-
-    impl RecvHalf {
-        pub async fn recv_from(&mut self, buf: &mut [u8]) -> io::Result<(usize, SocketAddr)> {
-            poll_fn(|cx| {
-                let mut inner = self.inner.lock().unwrap();
-                let fut = inner.recv_from(buf);
-                pin_mut!(fut);
-                fut.poll(cx)
-            }).await
-        }
-    }
-
-    pub fn other<E: Into<Box<dyn std::error::Error + Send + Sync>>>(e: E) -> io::Error {
-        io::Error::new(io::ErrorKind::Other, e)
-    }
-}
-#[async_trait]
-pub trait Proxy {
-    async fn new_tcp(&self, addr: SocketAddr) -> io::Result<BoxTcp>;
-    async fn new_udp(&self, addr: SocketAddr) -> io::Result<BoxUdp>;
-}
-
-pub async fn new_tcp_timeout(proxy: &BoxProxy, addr: SocketAddr) -> io::Result<BoxTcp> {
-    Ok(timeout(CONNECT_TIMEOUT, proxy.new_tcp(addr)).await??)
-}
-
-pub async fn new_udp_timeout(proxy: &BoxProxy, addr: SocketAddr) -> io::Result<BoxUdp> {
-    Ok(timeout(CONNECT_TIMEOUT, proxy.new_udp(addr)).await??)
+pub mod prelude {
+    pub use super::traits::{Udp as _, Tcp as _, Proxy as _};
 }
 
 fn io_other(s: &str) -> io::Error {
     io::Error::new(io::ErrorKind::Other, s)
 }
 
-pub async fn resolve(proxy: &BoxProxy, dns_server: SocketAddr, domain: &str) -> io::Result<Vec<Ipv4Addr>> {
+pub fn other<E: Into<Box<dyn std::error::Error + Send + Sync>>>(e: E) -> io::Error {
+    io::Error::new(io::ErrorKind::Other, e)
+}
+
+pub async fn resolve(proxy: &BoxedProxy, dns_server: &SocketAddr, domain: &str) -> io::Result<Vec<Ipv4Addr>> {
     use dns_parser::{Builder, QueryType, QueryClass, Packet, RData, rdata::A};
 
     let mut builder = Builder::new_query(1, true);
@@ -110,7 +40,7 @@ pub async fn resolve(proxy: &BoxProxy, dns_server: SocketAddr, domain: &str) -> 
     
     let mut buf = vec![0u8; 8192];
     let mut udp = proxy.new_udp("0.0.0.0:0".parse().unwrap()).await?;
-    udp.send_to(&p, dns_server).await?;
+    udp.send_to(&p, &dns_server).await?;
     let (size, _addr) = udp.recv_from(&mut buf).await?;
     buf.truncate(size);
 
@@ -159,7 +89,7 @@ mod test {
             copy(&mut reader, &mut writer).await?;
             Ok::<_, io::Error>(())
         });
-        let proxy: BoxProxy = DirectProxy::new();
+        let proxy = DirectProxy::new();
         let mut tcp = proxy
             .new_tcp(addr)
             .await
@@ -184,11 +114,11 @@ mod test {
             server.send_to(&buf[..size], addr).await?;
             Ok::<_, io::Error>(())
         });
-        let proxy: BoxProxy = DirectProxy::new();
+        let proxy = DirectProxy::new();
         let mut udp = proxy.new_udp(*ANY_ADDR).await.unwrap();
 
         let mut buf = [0u8; 8192];
-        udp.send_to(b"hello", target).await?;
+        udp.send_to(b"hello", &target).await?;
         let (size, addr) = udp.recv_from(&mut buf).await?;
         assert_eq!(addr, target);
         assert_eq!(buf[..size], b"hello"[..]);
@@ -208,7 +138,7 @@ mod test {
             copy(&mut reader, &mut writer).await?;
             Ok::<_, io::Error>(())
         });
-        let proxy: BoxProxy = Socks5Proxy::new(socks5_addr.to_string(), None);
+        let proxy = Socks5Proxy::new(socks5_addr.to_string(), None);
         let mut tcp = proxy
             .new_tcp(addr)
             .await

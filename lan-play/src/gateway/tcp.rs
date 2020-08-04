@@ -1,5 +1,5 @@
 use crate::future_smoltcp::{TcpListener, TcpSocket};
-use crate::proxy::{BoxProxy, new_tcp_timeout};
+use crate::proxy::BoxedProxy;
 use tokio::{io::{copy, split}, time::Instant, prelude::*};
 use super::timeout_stream::TimeoutStream;
 use std::io;
@@ -10,11 +10,11 @@ use futures::{future::try_join, stream::{StreamExt, select_all}};
 const TCP_TIMEOUT: Duration = Duration::from_secs(60);
 
 pub(super) struct TcpGateway {
-    proxy: Arc<BoxProxy>
+    proxy: Arc<BoxedProxy>
 }
 
 impl TcpGateway {
-    pub fn new(proxy: Arc<BoxProxy>) -> TcpGateway {
+    pub fn new(proxy: Arc<BoxedProxy>) -> TcpGateway {
         TcpGateway {
             proxy,
         }
@@ -35,7 +35,7 @@ impl TcpGateway {
 
         tokio::spawn(async move {
             let (local_addr, peer_addr) = (stcp.local_addr(), stcp.peer_addr());
-            let ptcp = match new_tcp_timeout(&proxy, stcp.local_addr()?).await {
+            let ptcp = match proxy.new_tcp_timeout(stcp.local_addr()?).await {
                 Ok(s) => s,
                 Err(e) => {
                     log::error!("tcp connect to {:?} err {:?}", stcp.local_addr()?, e);

@@ -1,5 +1,5 @@
 use crate::future_smoltcp::{OwnedUdp, UdpSocket, SendHalf as UdpSendHalf};
-use crate::proxy::{other, BoxProxy, SendHalf, RecvHalf, new_udp_timeout};
+use crate::proxy::{other, BoxedProxy, SendHalf, RecvHalf};
 use tokio::{spawn, sync::Mutex, time::Duration};
 use drop_abort::{abortable, DropAbortHandle};
 use std::io;
@@ -13,12 +13,12 @@ use async_channel::{Sender, Receiver, unbounded};
 const UDP_TIMEOUT: Duration = Duration::from_secs(60);
 
 pub(super) struct UdpGateway {
-    proxy: Arc<BoxProxy>,
+    proxy: Arc<BoxedProxy>,
     cache: Mutex<LruCache<SocketAddr, UdpConnection>>,
 }
 
 impl UdpGateway {
-    pub fn new(proxy: Arc<BoxProxy>) -> UdpGateway {
+    pub fn new(proxy: Arc<BoxedProxy>) -> UdpGateway {
         UdpGateway {
             proxy,
             cache: Mutex::new(LruCache::new(100)),
@@ -66,7 +66,7 @@ impl UdpGateway {
             log::trace!("new udp from {:?}", src);
         }
         let connection = cache.get_mut(&src).unwrap();
-        connection.send_to(&udp.data, udp.dst()).await?;
+        connection.send_to(&udp.data, &udp.dst()).await?;
         Ok(())
     }
 }
@@ -103,13 +103,13 @@ impl UdpConnection {
         }
     }
     pub(super) async fn new(
-        proxy: &Arc<BoxProxy>,
+        proxy: &Arc<BoxedProxy>,
         sender: Arc<Mutex<UdpSendHalf>>,
         src: SocketAddr,
         visitor: Visitor,
     ) -> io::Result<UdpConnection> {
         let proxy = proxy.clone();
-        let (tx, rx) = new_udp_timeout(&proxy, "0.0.0.0:0".parse().unwrap()).await?.split();
+        let (tx, rx) = proxy.new_udp_timeout("0.0.0.0:0".parse().unwrap()).await?.split();
         let (fut, _handle) = abortable(
             UdpConnection::run(rx, sender, src)
         );
@@ -120,7 +120,7 @@ impl UdpConnection {
             _handle
         })
     }
-    pub(super) async fn send_to(&mut self, buf: &[u8], addr: SocketAddr) -> io::Result<usize> {
+    pub(super) async fn send_to(&mut self, buf: &[u8], addr: &SocketAddr) -> io::Result<usize> {
         self.visitor.visit();
         self.sender.send_to(buf, addr).await
     }
