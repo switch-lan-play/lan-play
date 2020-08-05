@@ -1,7 +1,7 @@
 use crate::error::{Error, Result};
 use crate::future_smoltcp::{Net, TcpListener, BufferSize};
 use crate::gateway::Gateway;
-use crate::proxy::BoxProxy;
+use crate::proxy::BoxedProxy;
 use crate::interface::{ErrorWithDesc, RawsockInterface, RawsockInterfaceSet, IntercepterBuilder};
 use crate::client::LanClient;
 use futures::future::join_all;
@@ -35,7 +35,7 @@ pub struct LanPlay {
 }
 
 impl LanPlay {
-    pub fn new(proxy: BoxProxy, ipv4cidr: Ipv4Cidr, gateway_ip: Ipv4Address, mtu: usize, buffer_size: BufferSize) -> LanPlay {
+    pub fn new(proxy: BoxedProxy, ipv4cidr: Ipv4Cidr, gateway_ip: Ipv4Address, mtu: usize, buffer_size: BufferSize) -> LanPlay {
         LanPlay {
             gateway: Gateway::new(proxy),
             ipv4cidr,

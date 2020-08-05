@@ -3,7 +3,7 @@ mod tcp;
 mod udp;
 
 use crate::future_smoltcp::{TcpListener, UdpSocket};
-use crate::proxy::BoxProxy;
+use crate::proxy::BoxedProxy;
 use std::io;
 use std::sync::Arc;
 use futures::future::try_join;
@@ -16,7 +16,7 @@ pub struct Gateway {
 }
 
 impl Gateway {
-    pub fn new(proxy: BoxProxy) -> Gateway {
+    pub fn new(proxy: BoxedProxy) -> Gateway {
         let proxy = Arc::new(proxy);
         Gateway {
             tcp: TcpGateway::new(proxy.clone()),
