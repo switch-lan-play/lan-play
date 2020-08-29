@@ -19,7 +19,7 @@ dotenv = "0.15"
 anyhow = "1.0"
 thiserror = "1.0"
 async-socks5 = { version = "0.3.1", optional = true }
-lru = "0.5"
+lru = "0.6"
 drop-abort = "0.1"
 url = "2.1"
 dns-parser = "0.8"
