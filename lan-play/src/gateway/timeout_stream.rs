@@ -31,8 +31,8 @@ where
     fn poll_read(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
-        buf: &mut [u8],
-    ) -> Poll<io::Result<usize>> {
+        buf: &mut io::ReadBuf<'_>,
+    ) -> Poll<io::Result<()>> {
         match Pin::new(&mut self.s).poll_read(cx, buf) {
             Poll::Ready(r) => {
                 self.timeout.visit();

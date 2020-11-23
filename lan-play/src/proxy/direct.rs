@@ -1,6 +1,7 @@
 use super::{traits, BoxedProxy, BoxedTcp, BoxedUdp, SocketAddr, prelude::*};
 use tokio::{io, net::{TcpStream, UdpSocket}};
 use std::task::{Context, Poll};
+use futures::ready;
 
 impl traits::Tcp for TcpStream {}
 
@@ -9,7 +10,9 @@ impl traits::Udp for UdpSocket {
         UdpSocket::poll_send_to(&self, cx, buf, target)
     }
     fn poll_recv_from(self: &mut Self, cx: &mut Context<'_>, buf: &mut [u8]) -> Poll<io::Result<(usize, SocketAddr)>> {
-        UdpSocket::poll_recv_from(&self, cx, buf)
+        let mut buf = io::ReadBuf::new(buf);
+        let addr = ready!(UdpSocket::poll_recv_from(&self, cx, &mut buf))?;
+        Poll::Ready(Ok((buf.filled().len(), addr)))
     }
 }
 

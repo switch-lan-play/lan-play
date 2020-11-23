@@ -1,4 +1,4 @@
-use tokio::{sync::Notify, time::{delay_for, Delay}};
+use tokio::{sync::Notify, time::{sleep, Sleep}};
 use super::{Ethernet, SocketHandle, SocketSet, BufferSize};
 use futures::prelude::*;
 use futures::select;
@@ -8,7 +8,7 @@ use std::io;
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::task::{Poll, Waker};
 
-struct FusedDelay(Delay);
+struct FusedDelay(Sleep);
 
 impl std::future::Future for FusedDelay {
     type Output = ();
@@ -105,13 +105,13 @@ impl NetReactor {
         self.sources.lock().unwrap().remove(handle);
     }
     pub fn notify(&self) {
-        self.notify.notify();
+        self.notify.notify_waiters();
     }
     pub async fn run(&self, mut ethernet: Ethernet) {
         let default_timeout = Duration::from_secs(60);
         let sockets = &self.socket_set;
         let mut ready = Vec::new();
-        let mut delay = FusedDelay(delay_for(default_timeout.into()));
+        let mut delay = FusedDelay(sleep(default_timeout.into()));
 
         loop {
             let start = Instant::now();

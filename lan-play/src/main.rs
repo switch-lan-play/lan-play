@@ -26,7 +26,7 @@ use smoltcp::wire::Ipv4Cidr;
 use std::net::Ipv4Addr;
 use url::Url;
 use future_smoltcp::BufferSize;
-use tokio::{time::{Instant, Duration, timeout, delay_for}, prelude::*};
+use tokio::{time::{Instant, Duration, timeout, sleep}, prelude::*};
 
 #[cfg(feature = "logging-allocator")]
 #[global_allocator]
@@ -192,7 +192,7 @@ async fn ping(relay: &str, times: &Option<u64>) -> Result<()> {
         timeout(Duration::from_secs(1), client.ping()).await??;
         println!("ping responsed in {:?} (#{})", start.elapsed(), i + 1);
         if i + 1 != times {
-            delay_for(Duration::from_secs(1)).await;
+            sleep(Duration::from_secs(1)).await;
         }
     }
 

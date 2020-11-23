@@ -1,5 +1,5 @@
 use crate::interface::{IntercepterFactory, Packet, BorrowedPacket};
-use tokio::{sync::Mutex, net::UdpSocket, time::{interval, Duration}};
+use tokio::{net::UdpSocket, time::{interval, Duration}};
 use async_channel::{Sender, Receiver, unbounded};
 use futures::stream::StreamExt;
 use std::sync::{Arc, Mutex as SyncMutex};
@@ -10,7 +10,7 @@ use futures::{select, prelude::*};
 
 #[derive(Debug)]
 struct Inner {
-    socket: Mutex<UdpSocket>,
+    socket: UdpSocket,
     map_sender: SyncMutex<HashMap<Ipv4Address, Sender<Packet>>>,
     all_sender: SyncMutex<Vec<Sender<Packet>>>,
     primary_sender: SyncMutex<Option<Sender<Packet>>>,
@@ -73,11 +73,11 @@ impl LanClientIntercepter {
 }
 
 impl LanClient {
-    async fn on_interval(socket: &mut UdpSocket) {
+    async fn on_interval(socket: &UdpSocket) {
         let keepalive = ForwarderFrame::Keepalive;
         socket.send(&keepalive.build()).await.unwrap();
     }
-    async fn on_ipv4(socket: &mut UdpSocket, pkt: &[u8]) {
+    async fn on_ipv4(socket: &UdpSocket, pkt: &[u8]) {
         let packet = ForwarderFrame::Ipv4(Ipv4::new(pkt));
         let packet = packet.build();
         socket.send(&packet).await.unwrap();
@@ -113,17 +113,17 @@ impl LanClient {
     }
     async fn process(inner: Arc<Inner>, rx: Receiver<Vec<u8>>) {
         let mut interval = interval(Duration::from_secs(30));
-        let mut socket = inner.socket.lock().await;
+        let socket = &inner.socket;
         loop {
             let mut buf = [0u8; 2048];
             select! {
                 _ = interval.next().fuse() => {
-                    LanClient::on_interval(&mut socket).await;
+                    LanClient::on_interval(socket).await;
                 }
                 pkt = rx.recv().fuse() => {
                     match pkt {
                         Ok(pkt) => {
-                            LanClient::on_ipv4(&mut socket, &pkt).await;
+                            LanClient::on_ipv4(socket, &pkt).await;
                         }
                         Err(e) => {
                             log::error!("lan client process err {:?}", e);
@@ -151,7 +151,7 @@ impl LanClient {
         socket.connect(&relay_server).await?;
         let (tx, rx) = unbounded();
         let inner = Arc::new(Inner {
-            socket: Mutex::new(socket),
+            socket,
             map_sender: SyncMutex::new(HashMap::new()),
             all_sender: SyncMutex::new(Vec::new()),
             primary_sender: SyncMutex::new(None),
@@ -172,7 +172,7 @@ impl LanClient {
         LanClientIntercepter::new(inner, cidr)
     }
     pub async fn ping(&self) -> io::Result<()> {
-        let mut socket = self.inner.socket.lock().await;
+        let socket = &self.inner.socket;
         let content = b"\x021234";
 
         socket.send(content).await?;

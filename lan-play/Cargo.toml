@@ -18,25 +18,25 @@ structopt = "0.3"
 dotenv = "0.15"
 anyhow = "1.0"
 thiserror = "1.0"
-async-socks5 = { version = "0.3.1", optional = true }
+async-socks5 = { version = "0.4.0", optional = true }
 lru = "0.6"
 drop-abort = "0.1"
 url = "2.1"
 dns-parser = "0.8"
-shadowsocks-rust = { version = "1.8.13", optional = true }
+shadowsocks-rust = { version = "1.8.23", optional = true }
 base64 = { version = "0.12.3", optional = true }
-async-timeout = "0.1"
+async-timeout = "0.2.0"
 logging-allocator = { version = "0.1.1", optional = true }
 
 [dependencies.tokio]
-version = "0.2.22"
-features = ["blocking", "dns", "fs", "io-driver", "io-util", "io-std", "macros", "net", "process", "rt-core", "rt-util", "signal", "stream", "sync", "time"]
+version = "0.3.4"
+features = ["full"]
 
 [features]
 default = [ "socks5" ]
 shadowsocks = [ "shadowsocks-rust", "base64" ]
 socks5 = [ "async-socks5" ]
-mt_executor = ["tokio/rt-threaded"]
+mt_executor = ["tokio/rt-multi-thread"]
 
 [dependencies.smoltcp]
 # version = "0.5.0"

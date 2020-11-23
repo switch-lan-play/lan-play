@@ -9,7 +9,7 @@ pub enum Error {
     #[error("NoInterface")]
     NoInterface,
     #[error("Timed out")]
-    Timedout(#[from] tokio::time::Elapsed),
+    Timedout(#[from] tokio::time::error::Elapsed),
     #[error("Smoltcp error {0:?}")]
     Smoltcp(smoltcp::Error),
     #[error("Bad Packet")]

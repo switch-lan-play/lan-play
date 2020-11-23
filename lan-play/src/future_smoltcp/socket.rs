@@ -292,11 +292,15 @@ impl AsyncRead for TcpSocket {
     fn poll_read(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
-        buf: &mut [u8],
-    ) -> Poll<io::Result<usize>> {
-        let fut = self.recv(buf);
-        futures::pin_mut!(fut);
-        fut.poll(cx)
+        buf: &mut io::ReadBuf<'_>,
+    ) -> Poll<io::Result<()>> {
+        let set = {
+            let fut = self.recv(buf.initialize_unfilled());
+            futures::pin_mut!(fut);
+            futures::ready!(fut.poll(cx))?
+        };
+        buf.set_filled(set);
+        Poll::Ready(Ok(()))
     }
 }
 
