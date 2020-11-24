@@ -37,7 +37,7 @@ impl RawsockInterface {
         let name = &desc.name;
         let mut interface = slf.lib.open_interface_arc(name)?;
         Arc::get_mut(&mut interface)
-            .ok_or(Error::Other("Bad Arc"))?
+            .unwrap()
             .set_filter_cstr(&slf.filter)?;
 
         let data_link = interface.data_link();
