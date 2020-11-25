@@ -5,6 +5,8 @@ use smoltcp::{
 use futures::{Stream, Sink, StreamExt, stream::iter};
 use std::{collections::VecDeque, io};
 
+const MAX_QUEUE_SIZE: usize = 100;
+
 pub trait Interface: Stream<Item=Packet> + Sink<Packet, Error=io::Error> + Unpin {
 }
 impl<T> Interface for T
@@ -27,12 +29,12 @@ where
     pub fn new(stream: S, mtu: usize) -> FutureDevice<S> {
         let mut caps = DeviceCapabilities::default();
         caps.max_transmission_unit = mtu;
-        caps.max_burst_size = None;
+        caps.max_burst_size = Some(MAX_QUEUE_SIZE);
         FutureDevice {
             caps,
             stream,
             temp: None,
-            send_queue: VecDeque::with_capacity(100),
+            send_queue: VecDeque::with_capacity(MAX_QUEUE_SIZE),
         }
     }
     pub fn need_wait(&self) -> bool {
@@ -98,7 +100,11 @@ where
         self.get_next().map(move |p| (FutureRxToken(p), FutureTxToken(self)))
     }
     fn transmit(&'d mut self) -> Option<Self::TxToken> {
-        Some(FutureTxToken(self))
+        if self.send_queue.len() < MAX_QUEUE_SIZE {
+            Some(FutureTxToken(self))
+        } else {
+            None
+        }
     }
     fn capabilities(&self) -> DeviceCapabilities {
         self.caps.clone()
