@@ -4,12 +4,11 @@ mod socket;
 mod socketset;
 mod device;
 
-use crate::interface::{RawsockInterface, IntercepterBuilder, PacketInterface};
 pub use raw_udp::OwnedUdp;
 use reactor::NetReactor;
 use smoltcp::{
     iface::{
-        EthernetInterface as SmoltcpEthernetInterface, EthernetInterfaceBuilder, NeighborCache,
+        EthernetInterfaceBuilder, NeighborCache,
         Routes,
     },
     wire::{EthernetAddress, IpCidr, Ipv4Address},
@@ -21,25 +20,24 @@ use std::collections::BTreeMap;
 use device::FutureDevice;
 use std::sync::Arc;
 
-pub type Ethernet = SmoltcpEthernetInterface<'static, 'static, 'static, FutureDevice<PacketInterface>>;
+// pub type Ethernet = SmoltcpEthernetInterface<'static, 'static, 'static, FutureDevice<PacketInterface>>;
 
 pub struct Net {
     reactor: Arc<NetReactor>,
 }
 
 impl Net {
-    pub fn new(
+    pub fn new<I>(
         ethernet_addr: EthernetAddress,
         ip_addrs: Vec<IpCidr>,
         gateway_ip: Ipv4Address,
-        interf: RawsockInterface,
-        intercepter: IntercepterBuilder,
+        stream: I,
         mtu: usize,
         buffer_size: BufferSize,
-    ) -> Net {
-        let stream = interf.start(
-            intercepter
-        );
+    ) -> Net
+    where
+        I: device::Interface + 'static + Send,
+    {
         let device = FutureDevice::new(stream, mtu);
         let neighbor_cache = NeighborCache::new(BTreeMap::new());
         let mut routes = Routes::new(BTreeMap::new());

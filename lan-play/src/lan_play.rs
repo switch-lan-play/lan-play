@@ -2,9 +2,9 @@ use crate::error::{Error, Result};
 use crate::future_smoltcp::{Net, TcpListener, BufferSize};
 use crate::gateway::Gateway;
 use crate::proxy::BoxedProxy;
-use crate::interface::{ErrorWithDesc, RawsockInterface, RawsockInterfaceSet, IntercepterBuilder};
+use crate::interface::{ErrorWithDesc, RawsockInterface, RawsockInterfaceSet};
 use crate::client::LanClient;
-use futures::future::join_all;
+use futures::{future::{join_all, ready}, stream::StreamExt};
 use smoltcp::wire::{Ipv4Address, Ipv4Cidr, EthernetFrame, EthernetProtocol, Ipv4Packet};
 
 const BACKLOG: usize = 10;
@@ -44,7 +44,7 @@ impl LanPlay {
             buffer_size,
         }
     }
-    pub async fn start(&mut self, set: &RawsockInterfaceSet, netif: Option<String>, client: Option<LanClient>) -> Result<()> {
+    pub async fn start(&mut self, set: &RawsockInterfaceSet, netif: Option<String>, _client: Option<LanClient>) -> Result<()> {
         let (mut opened, errored) = set.open_all_interface();
 
         for ErrorWithDesc(err, desc) in errored {
@@ -77,29 +77,23 @@ impl LanPlay {
         let futures = opened
             .into_iter()
             .map(|interface| {
-                let mut intercepter = IntercepterBuilder::new()
-                    .add(|packet| {
-                        filter_bad_packet(packet).is_err()
-                    });
-                if let Some(client) = &client {
-                    intercepter = intercepter.add_factory(client.to_intercepter_factory());
-                }
-
-                self.process_interface(interface, intercepter)
+                self.process_interface(interface)
             })
             .collect::<Vec<_>>();
         join_all(futures).await;
 
         Ok(())
     }
-    async fn process_interface(&self, interf: RawsockInterface, intercepter: IntercepterBuilder) {
-        let mac = interf.mac();
+    async fn process_interface(&self, interf: RawsockInterface) {
+        let mac = interf.mac().to_owned();
+        let stream = interf.start();
+        // TODO: add lan_client
+        let stream = stream.filter(|p| ready(filter_bad_packet(p).is_ok()));
         let net = Net::new(
             mac.clone(),
             vec![self.ipv4cidr.into()],
             self.gateway_ip,
-            interf,
-            intercepter,
+            stream,
             self.mtu,
             self.buffer_size,
         );

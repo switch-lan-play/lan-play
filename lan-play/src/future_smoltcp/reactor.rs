@@ -1,5 +1,5 @@
 use tokio::{sync::Notify, time::{sleep, Sleep}};
-use super::{Ethernet, SocketHandle, SocketSet, BufferSize};
+use super::{FutureDevice, device::Interface, SocketHandle, SocketSet, BufferSize};
 use futures::prelude::*;
 use futures::select;
 use smoltcp::{socket::TcpState, time::{Duration, Instant}};
@@ -107,7 +107,10 @@ impl NetReactor {
     pub fn notify(&self) {
         self.notify.notify_waiters();
     }
-    pub async fn run(&self, mut ethernet: Ethernet) {
+    pub async fn run<I>(&self, mut ethernet: smoltcp::iface::EthernetInterface<'static, 'static, 'static, FutureDevice<I>>)
+    where
+        I: Interface + 'static,
+    {
         let default_timeout = Duration::from_secs(60);
         let sockets = &self.socket_set;
         let mut ready = Vec::new();

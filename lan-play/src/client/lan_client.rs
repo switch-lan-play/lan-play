@@ -1,4 +1,4 @@
-use crate::interface::{IntercepterFactory, Packet, BorrowedPacket};
+use crate::interface::Packet;
 use tokio::{net::UdpSocket, time::{interval, Duration}};
 use async_channel::{Sender, Receiver, unbounded};
 use futures::stream::StreamExt;
@@ -27,50 +27,50 @@ pub struct LanClient {
     cidr: Ipv4Cidr,
 }
 
-struct LanClientIntercepter {
-    inner: Arc<Inner>,
-    sender: Sender<Packet>,
-    cidr: Ipv4Cidr,
-}
+// struct LanClientIntercepter {
+//     inner: Arc<Inner>,
+//     sender: Sender<Packet>,
+//     cidr: Ipv4Cidr,
+// }
 
-impl LanClientIntercepter {
-    fn new(inner: Arc<Inner>, cidr: Ipv4Cidr) -> IntercepterFactory {
-        Box::new(move |sender: Sender<Packet>| {
-            let intercepter = LanClientIntercepter {
-                inner: inner.clone(),
-                sender: sender.clone(),
-                cidr,
-            };
-            inner.all_sender.lock().unwrap().push(sender.clone());
-            Box::new(move |pkt: &BorrowedPacket| {
-                intercepter.process(pkt)
-            })
-        })
-    }
-    fn process(&self, pkt: &BorrowedPacket) -> bool {
-        let process = || -> crate::Result<()> {
-            *self.inner.primary_sender.lock().unwrap() = Some(self.sender.clone());
+// impl LanClientIntercepter {
+//     fn new(inner: Arc<Inner>, cidr: Ipv4Cidr) -> IntercepterFactory {
+//         Box::new(move |sender: Sender<Packet>| {
+//             let intercepter = LanClientIntercepter {
+//                 inner: inner.clone(),
+//                 sender: sender.clone(),
+//                 cidr,
+//             };
+//             inner.all_sender.lock().unwrap().push(sender.clone());
+//             Box::new(move |pkt: &BorrowedPacket| {
+//                 intercepter.process(pkt)
+//             })
+//         })
+//     }
+//     fn process(&self, pkt: &BorrowedPacket) -> bool {
+//         let process = || -> crate::Result<()> {
+//             *self.inner.primary_sender.lock().unwrap() = Some(self.sender.clone());
 
-            let eth_packet = EthernetFrame::new_checked(pkt as &[u8])?;
-            if eth_packet.ethertype() != EthernetProtocol::Ipv4 {
-                return Ok(())
-            }
+//             let eth_packet = EthernetFrame::new_checked(pkt as &[u8])?;
+//             if eth_packet.ethertype() != EthernetProtocol::Ipv4 {
+//                 return Ok(())
+//             }
 
-            *self.inner.self_addr.lock().unwrap() = Some(eth_packet.dst_addr());
+//             *self.inner.self_addr.lock().unwrap() = Some(eth_packet.dst_addr());
 
-            let packet = Ipv4Packet::new_checked(eth_packet.payload())?;
-            if self.cidr.contains_addr(&packet.src_addr()) && self.cidr.contains_addr(&packet.dst_addr()) {
-                self.inner.arp.lock().unwrap().insert(packet.src_addr(), eth_packet.src_addr());
+//             let packet = Ipv4Packet::new_checked(eth_packet.payload())?;
+//             if self.cidr.contains_addr(&packet.src_addr()) && self.cidr.contains_addr(&packet.dst_addr()) {
+//                 self.inner.arp.lock().unwrap().insert(packet.src_addr(), eth_packet.src_addr());
 
-                self.inner.map_sender.lock().unwrap().insert(packet.src_addr(), self.sender.clone());
-                self.inner.tx.try_send(pkt.to_vec()).unwrap();
-                return Err(crate::error::Error::BadPacket);
-            }
-            Ok(())
-        };
-        process().is_err()
-    }
-}
+//                 self.inner.map_sender.lock().unwrap().insert(packet.src_addr(), self.sender.clone());
+//                 self.inner.tx.try_send(pkt.to_vec()).unwrap();
+//                 return Err(crate::error::Error::BadPacket);
+//             }
+//             Ok(())
+//         };
+//         process().is_err()
+//     }
+// }
 
 impl LanClient {
     async fn on_interval(socket: &UdpSocket) {
@@ -165,11 +165,6 @@ impl LanClient {
             inner,
             cidr,
         })
-    }
-    pub fn to_intercepter_factory(&self) -> IntercepterFactory {
-        let inner = self.inner.clone();
-        let cidr = self.cidr.clone();
-        LanClientIntercepter::new(inner, cidr)
     }
     pub async fn ping(&self) -> io::Result<()> {
         let socket = &self.inner.socket;
