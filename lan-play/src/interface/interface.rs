@@ -1,6 +1,5 @@
 use super::{Error, ErrorWithDesc, intercepter::{IntercepterBuilder, IntercepterFn}};
 use crate::interface_info::{get_interface_info, InterfaceInfo};
-use tokio::task::JoinHandle;
 use async_channel::{unbounded, Receiver, Sender};
 use rawsock::traits::{DynamicInterface, Library};
 use rawsock::InterfaceDescription;
@@ -8,9 +7,48 @@ use smoltcp::wire::{EthernetAddress, Ipv4Cidr};
 use std::ffi::CString;
 use std::sync::Arc;
 use std::thread;
+use futures::{Stream, Sink};
+use std::{pin::Pin, task::{Context, Poll}, io};
 
 pub type Packet = Vec<u8>;
 type Interface = Arc<dyn DynamicInterface<'static> + 'static>;
+
+pub struct PacketInterface {
+    sink: Sender<Packet>,
+    stream: Receiver<Packet>,
+}
+
+impl Stream for PacketInterface {
+    type Item = Packet;
+
+    fn poll_next(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Option<Self::Item>> {
+        Stream::poll_next(Pin::new(&mut self.stream), cx)
+    }
+}
+
+impl Sink<Packet> for PacketInterface {
+    type Error = io::Error;
+
+    fn poll_ready(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        Poll::Ready(Ok(()))
+    }
+
+    fn start_send(self: Pin<&mut Self>, item: Packet) -> Result<(), Self::Error> {
+        self.sink.try_send(item).map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+        Ok(())
+    }
+
+    fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        Poll::Ready(Ok(()))
+    }
+
+    fn poll_close(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        Poll::Ready(Ok(()))
+    }
+}
 
 pub struct RawsockInterface {
     pub desc: InterfaceDescription,
@@ -73,20 +111,19 @@ impl RawsockInterface {
     pub fn start(
         self,
         intercepter_builder: IntercepterBuilder,
-    ) -> (
-        JoinHandle<()>,
-        Sender<Packet>,
-        Receiver<Packet>,
-    ) {
+    ) -> PacketInterface {
         let interface = self.interface;
         let (packet_sender, stream) = unbounded();
         let (sink, packet_receiver) = unbounded();
         let intercepter = intercepter_builder.build(sink.clone());
 
         Self::start_thread(interface.clone(), packet_sender, intercepter);
-        let running = tokio::spawn(Self::run(interface, packet_receiver));
+        tokio::spawn(Self::run(interface, packet_receiver));
 
-        (running, sink, stream)
+        PacketInterface {
+            sink,
+            stream,
+        }
     }
     async fn run(interface: Interface, packet_receiver: Receiver<Packet>) {
         while let Ok(data) = packet_receiver.recv().await {

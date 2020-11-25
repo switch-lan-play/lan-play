@@ -1,45 +1,56 @@
-use async_channel::{Sender, Receiver, TryRecvError};
 use smoltcp::{
     phy::{DeviceCapabilities, RxToken, TxToken},
     time::Instant,
 };
+use futures::{Stream, Sink, StreamExt, stream::iter};
+use std::{collections::VecDeque, io};
 
-type Packet = Vec<u8>;
+pub trait Interface: Stream<Item=Packet> + Sink<Packet, Error=io::Error> + Unpin {
+}
+impl<T> Interface for T
+where
+    T: Stream<Item=Packet> + Sink<Packet, Error=io::Error> + Unpin,
+{}
+pub type Packet = Vec<u8>;
 
-pub struct FutureDevice {
+pub struct FutureDevice<S> {
     caps: DeviceCapabilities,
-    receiver: Receiver<Packet>,
-    sender: Sender<Packet>,
+    stream: S,
     temp: Option<Packet>,
+    send_queue: VecDeque<Packet>,
 }
 
-impl FutureDevice {
-    pub fn new(tx: Sender<Packet>, rx: Receiver<Packet>, mtu: usize) -> FutureDevice {
+impl<S> FutureDevice<S>
+where
+    S: Interface,
+{
+    pub fn new(stream: S, mtu: usize) -> FutureDevice<S> {
         let mut caps = DeviceCapabilities::default();
         caps.max_transmission_unit = mtu;
-        caps.max_burst_size = Some(1);
+        caps.max_burst_size = None;
         FutureDevice {
             caps,
-            receiver: rx,
-            sender: tx,
+            stream,
             temp: None,
+            send_queue: VecDeque::with_capacity(100),
         }
     }
     pub fn need_wait(&self) -> bool {
         self.temp.is_none()
     }
     pub async fn wait(&mut self) {
-        self.temp = self.receiver.recv().await.ok();
+        self.temp = self.stream.next().await;
+    }
+    pub async fn send_queue(&mut self) -> io::Result<()> {
+        let stream = iter(self.send_queue.drain(..).map(|i| Ok(i)));
+        stream.forward(&mut self.stream).await?;
+        Ok(())
     }
     fn get_next(&mut self) -> Option<Packet> {
         if let Some(t) = self.temp.take() {
             return Some(t);
         }
-        match self.receiver.try_recv() {
-            Ok(p) => Some(p),
-            Err(TryRecvError::Empty) => None,
-            Err(TryRecvError::Closed) => todo!("handle receiver closed"),
-        }
+        None
     }
 }
 
@@ -56,9 +67,12 @@ impl RxToken for FutureRxToken {
     }
 }
 
-pub struct FutureTxToken(Sender<Packet>);
+pub struct FutureTxToken<'d, S>(&'d mut FutureDevice<S>);
 
-impl TxToken for FutureTxToken {
+impl<'d, S> TxToken for FutureTxToken<'d, S>
+where
+    S: Interface,
+{
     fn consume<R, F>(self, _timestamp: Instant, len: usize, f: F) -> smoltcp::Result<R>
     where
         F: FnOnce(&mut [u8]) -> smoltcp::Result<R>,
@@ -66,26 +80,26 @@ impl TxToken for FutureTxToken {
         let mut buffer = vec![0u8; len];
         let result = f(&mut buffer);
         if result.is_ok() {
-            let s = self.0;
-            if let Err(_e) = s.try_send(buffer) {
-                log::warn!("send error");
-            }
+            self.0.send_queue.push_back(buffer);
         }
         result
     }
 }
 
-impl<'d> smoltcp::phy::Device<'d> for FutureDevice {
+impl<'d, S> smoltcp::phy::Device<'d> for FutureDevice<S>
+where
+    S: Interface,
+    S: 'd,
+{
     type RxToken = FutureRxToken;
-    type TxToken = FutureTxToken;
+    type TxToken = FutureTxToken<'d, S>;
 
     fn receive(&'d mut self) -> Option<(Self::RxToken, Self::TxToken)> {
-        self.get_next().map(|p| (FutureRxToken(p), FutureTxToken(self.sender.clone())))
+        self.get_next().map(move |p| (FutureRxToken(p), FutureTxToken(self)))
     }
     fn transmit(&'d mut self) -> Option<Self::TxToken> {
-        Some(FutureTxToken(self.sender.clone()))
+        Some(FutureTxToken(self))
     }
-
     fn capabilities(&self) -> DeviceCapabilities {
         self.caps.clone()
     }

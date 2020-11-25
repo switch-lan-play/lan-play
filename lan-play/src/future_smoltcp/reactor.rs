@@ -123,6 +123,7 @@ impl NetReactor {
             let device = ethernet.device_mut();
             delay.0.reset(tokio::time::Instant::now() + deadline.into());
 
+            device.send_queue().await.expect("Failed to send queue");
             if device.need_wait() {
                 select! {
                     _ = delay => {},

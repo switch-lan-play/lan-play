@@ -82,7 +82,7 @@ mod test {
 
     #[tokio::test]
     async fn test_direct_proxy() -> io::Result<()> {
-        let (mut server, addr) = server_tcp().await;
+        let (server, addr) = server_tcp().await;
         let join = spawn(async move {
             let (socket, _) = server.accept().await?;
             let (mut reader, mut writer) = split(socket);
@@ -107,7 +107,7 @@ mod test {
 
     #[tokio::test]
     async fn test_direct_proxy_udp() -> io::Result<()> {
-        let (mut server, target) = server_udp().await;
+        let (server, target) = server_udp().await;
         let join = spawn(async move {
             let mut buf = [0u8; 8192];
             let (size, addr) = server.recv_from(&mut buf).await?;
@@ -131,7 +131,7 @@ mod test {
     async fn test_socks5_proxy() -> anyhow::Result<()> {
         let (socks5, socks5_addr) = socks5_server().await;
 
-        let (mut server, addr) = server_tcp().await;
+        let (server, addr) = server_tcp().await;
         let join = spawn(async move {
             let (socket, _) = server.accept().await?;
             let (mut reader, mut writer) = split(socket);
