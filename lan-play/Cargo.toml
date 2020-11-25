@@ -30,7 +30,7 @@ logging-allocator = { version = "0.1.1", optional = true }
 
 [dependencies.tokio]
 version = "0.3.4"
-features = ["full"]
+features = ["fs", "io-util", "io-std", "macros", "net", "parking_lot", "process", "rt", "signal", "stream", "sync", "time"]
 
 [features]
 default = [ "socks5" ]

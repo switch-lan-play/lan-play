@@ -234,8 +234,7 @@ async fn check(proxy: &Option<Url>) -> Result<()> {
     Ok(())
 }
 
-#[tokio::main]
-async fn main() -> Result<()> {
+async fn async_main() -> Result<()> {
     dotenv::dotenv().ok();
     env_logger::from_env(env_logger::Env::default().default_filter_or("info")).init();
 
@@ -247,4 +246,11 @@ async fn main() -> Result<()> {
         Some(Subcommand::Check { proxy }) => check(proxy).await,
         None => run(opt).await,
     }
+}
+
+fn main() -> Result<()> {
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()?;
+    rt.block_on(async_main())
 }
