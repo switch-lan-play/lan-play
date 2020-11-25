@@ -6,14 +6,14 @@ use smoltcp::{socket::TcpState, time::{Duration, Instant}};
 use std::collections::HashMap;
 use std::io;
 use std::sync::{Arc, Mutex, MutexGuard};
-use std::task::{Poll, Waker};
+use std::{task::{Poll, Waker, Context}, future::Future, pin::Pin};
 
 struct FusedDelay(Sleep);
 
-impl std::future::Future for FusedDelay {
+impl Future for FusedDelay {
     type Output = ();
-    fn poll(mut self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> Poll<Self::Output> {
-        std::pin::Pin::new(&mut self.0).poll(cx)
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        Pin::new(&mut self.0).poll(cx)
     }
 }
 
