@@ -249,6 +249,11 @@ async fn async_main() -> Result<()> {
 }
 
 fn main() -> Result<()> {
+    #[cfg(feature = "mt_executor")]
+    let rt = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()?;
+    #[cfg(not(feature = "mt_executor"))]
     let rt = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()?;
